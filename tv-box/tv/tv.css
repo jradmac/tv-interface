@@ -192,6 +192,10 @@ html[data-theme="rain"]{
   --room:#090E14; --room-hi:#1A2531; --card:#151D26; --ink:#EAF1F8; --ink2:#AAB8C6; --mute:#72818F; --line:#27333F; --ok:#7FD6A6;
   --lift:0 1px 2px rgba(0,0,0,.4), 0 12px 24px -8px rgba(0,0,0,.5), 0 48px 96px -24px rgba(0,0,0,.8), 0 0 0 1px rgba(170,200,230,.08);
   --rest:0 1px 2px rgba(0,0,0,.4), 0 16px 40px -16px rgba(0,0,0,.6); --glass:rgba(21,29,38,.8)}
+html[data-theme="snow"]{
+  --room:#0A1220; --room-hi:#22324E; --card:#162033; --ink:#F0F5FC; --ink2:#C0CDDF; --mute:#9AABC4; --line:#2A3850; --ok:#86DDB0;
+  --lift:0 1px 2px rgba(0,0,0,.4), 0 12px 24px -8px rgba(0,0,0,.5), 0 48px 96px -24px rgba(0,0,0,.8), 0 0 0 1px rgba(190,215,255,.09);
+  --rest:0 1px 2px rgba(0,0,0,.4), 0 16px 40px -16px rgba(0,0,0,.6); --glass:rgba(22,32,51,.82)}
 html[data-theme="jungle"]{
   --room:#07140C; --room-hi:#225239; --card:#101B14; --ink:#EEF6EC; --ink2:#B4C9B6; --mute:#7D957F; --line:#243A2A; --ok:#8FE39E;
   --lift:0 1px 2px rgba(0,0,0,.4), 0 12px 24px -8px rgba(0,0,0,.5), 0 48px 96px -24px rgba(0,0,0,.8), 0 0 0 1px rgba(150,230,160,.08);

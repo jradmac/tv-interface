@@ -1,5 +1,5 @@
-// TV themes: Light (default), Dark, Nature (photos), and four animated ones: Tech, Rain, Jungle, Aurora.
-// Rain and Jungle also have ambient sound (ambience.js).
+// TV themes: Light (default), Dark, Nature (photos), and five animated ones: Tech, Rain, Snow, Jungle, Aurora.
+// Rain, Snow and Jungle also have ambient sound (ambience.js).
 // Applied as <html data-theme>.
 // Nature photos are bundled on the box: /themes/nature/list.json = [{src, credit}] (the installer writes it).
 // Until those exist, Nature shows painted scenes drawn here, so it always works offline.
@@ -11,6 +11,7 @@ window.TVTheme = (() => {
     { k: 'nature', name: 'Nature', sw: 'linear-gradient(160deg,#9CC3D9 0%,#E7C9A0 45%,#4E7A5A 46%,#22402F 100%)' },
     { k: 'tech', name: 'Tech', sw: 'radial-gradient(circle at 30% 70%,#3B7BFF 0,#0D1424 45%,#06080D 100%)' },
     { k: 'rain', name: 'Rain', sw: 'linear-gradient(170deg,#3A4C5E 0%,#18222C 55%,#0A0F15 100%)' },
+    { k: 'snow', name: 'Snow', sw: 'linear-gradient(175deg,#2C3E5E 0%,#16233A 52%,#DCE8F5 53%,#9FB6D0 100%)' },
     { k: 'jungle', name: 'Jungle', sw: 'radial-gradient(circle at 60% 35%,#BFE8A8 0,#2F7A4A 30%,#12301F 62%,#06110A 100%)' },
     { k: 'aurora', name: 'Aurora', sw: 'linear-gradient(160deg,#7A5AE0 0%,#2BD9A8 42%,#0B1C24 70%,#050B12 100%)' },
   ];
@@ -407,7 +408,61 @@ window.TVTheme = (() => {
     },
   };
 
-  const FX = { tech, aurora, rain, jungle };
+  // Snow: a still winter night. Snow drifts down in three depths and sways with the breeze, over
+  // white drifts and a line of pines, with a few warm lights glowing far off and frost glinting below.
+  let flakes = [], snowLand = null, flakeImg = null, lamps = [], frost = [];
+  const snow = {
+    seed() {
+      flakeImg = glow(32, [[0, 'rgba(255,255,255,1)'], [.35, 'rgba(240,247,255,.7)'], [1, 'rgba(225,238,255,0)']]);
+      const lamp = glow(64, [[0, 'rgba(255,214,150,.9)'], [.3, 'rgba(255,190,110,.35)'], [1, 'rgba(255,170,90,0)']]);
+      lamps = [[150, 474, 70], [262, 488, 46], [742, 482, 58], [860, 470, 40]].map(([x, y, s]) => ({ img: lamp, x, y, s, p: Math.random() * TAU }));
+      // The land is painted once: far pines, then two soft drifts of snow.
+      snowLand = sprite(W, 200, (g, w, h) => {
+        let r = 7; const rnd = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
+        g.fillStyle = '#0C1626';
+        for (let x = -10; x < w; x += 14 + rnd() * 22) {         // pines: stacked triangles
+          const th = 34 + rnd() * 56, base = 78 + rnd() * 10, tw = th * .36;
+          for (let k = 0; k < 4; k++) { const y = base - th + k * th * .22, ww = tw * (.35 + k * .22); g.beginPath(); g.moveTo(x, y); g.lineTo(x + ww, y + th * .34); g.lineTo(x - ww, y + th * .34); g.fill(); }
+        }
+        const drift = (y0, amp, top, bottom) => {
+          const v = g.createLinearGradient(0, y0 - amp, 0, h); v.addColorStop(0, top); v.addColorStop(1, bottom);
+          g.fillStyle = v; g.beginPath(); g.moveTo(0, h);
+          const a = rnd() * 6, b = rnd() * 6;
+          for (let x = 0; x <= w; x += 12) g.lineTo(x, y0 + Math.sin(x * .0052 + a) * amp + Math.sin(x * .013 + b) * amp * .35);
+          g.lineTo(w, h); g.fill();
+        };
+        drift(84, 12, '#3A4D6B', '#243247');
+        drift(122, 14, '#B9CADF', '#62789A');
+      });
+      const layer = (n, s, v, a) => Array.from({ length: n }, () => ({ x: Math.random() * W, y: Math.random() * H, s: s * (.7 + Math.random() * .6), v: v * (.7 + Math.random() * .6), a: a * (.6 + Math.random() * .4), p: Math.random() * TAU, f: .5 + Math.random() }));
+      flakes = [...layer(150, 2.4, .45, .55), ...layer(80, 4.5, .8, .7), ...layer(26, 11, 1.3, .32)];
+      frost = Array.from({ length: 34 }, () => ({ x: Math.random() * W, y: 522 + Math.random() * 18, p: Math.random() * TAU, s: .6 + Math.random() * 1.6 }));
+    },
+    draw(dt) {
+      ctx.drawImage(snowLand, 0, H - 144);
+      ctx.globalCompositeOperation = 'lighter';
+      for (const l of lamps) {                                 // far-off windows, flickering very slightly
+        ctx.globalAlpha = .5 + .12 * Math.sin(t * 6 + l.p);
+        ctx.drawImage(l.img, l.x - l.s / 2, l.y - l.s / 2, l.s, l.s);
+      }
+      ctx.fillStyle = '#fff';
+      for (const f of frost) {                                 // frost catching the light
+        const a = Math.sin(f.p + t * 8 * f.s);
+        if (a < .5) continue;
+        ctx.globalAlpha = (a - .5) * 1.4; ctx.fillRect(f.x, f.y, 1.5, 1.5);
+      }
+      const wind = .25 * Math.sin(t * 1.1) + .15 * Math.sin(t * 2.7 + 1);   // the breeze leans the whole fall one way, then the other
+      for (const f of flakes) {
+        f.y += f.v * dt; f.x += (wind * f.v * 1.6 + Math.sin(t * 6 * f.f + f.p) * .22) * dt;
+        if (f.y > H + 8) { f.y = -8; f.x = Math.random() * W; }
+        if (f.x < -8) f.x = W + 8; else if (f.x > W + 8) f.x = -8;
+        ctx.globalAlpha = f.a;
+        ctx.drawImage(flakeImg, f.x - f.s / 2, f.y - f.s / 2, f.s, f.s);
+      }
+    },
+  };
+
+  const FX = { tech, aurora, rain, snow, jungle };
   function frame(now) {
     raf = requestAnimationFrame(frame);
     if (now - last < 33) return;              // ~30 fps is plenty for a background

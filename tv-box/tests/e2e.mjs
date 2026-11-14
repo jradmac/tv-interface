@@ -242,7 +242,7 @@ try {
   await tvPage.reload();
   await tvPage.waitForFunction(() => document.documentElement.dataset.theme === 'dark', null, { timeout: 6000 }).then(() => ok(true, 'the box remembers the theme across a reload'), () => ok(false, 'theme remembered'));
   const errs = []; tvPage.on('pageerror', (e) => errs.push(e.message));
-  for (const t of ['nature', 'tech', 'rain', 'jungle', 'aurora']) {
+  for (const t of ['nature', 'tech', 'rain', 'snow', 'jungle', 'aurora']) {
     await phone.evaluate((n) => link.send({ t: 'theme', name: n }), t);
     await tvPage.waitForFunction((n) => document.documentElement.dataset.theme === n, t, { timeout: 4000 }).then(() => ok(true, t + ' theme shows'), () => ok(false, t + ' theme'));
     await sleep(1500);
@@ -261,7 +261,7 @@ try {
   ok(await playing() === null && await tvPage.evaluate(() => { const c = document.querySelector('canvas.fx'), g = c.getContext('2d'); let n = 0; const o = g.clearRect.bind(g); g.clearRect = (...a) => { n++; o(...a); }; return new Promise((r) => setTimeout(() => { g.clearRect = o; r(n === 0); }, 500)); }), 'sound and animation both stop while a service takes over');
   await tvPage.evaluate(() => TVTheme.setBusy(false));
   ok(await playing() === 'jungle', 'and come back afterwards');
-  for (const k of ['rain', 'jungle']) {
+  for (const k of ['rain', 'snow', 'jungle']) {
     const a = await tvPage.evaluate(async (k) => { const b = await TVAmbience.render(k, 6), d = b.getChannelData(0); let peak = 0, sq = 0; for (let i = 0; i < d.length; i++) { peak = Math.max(peak, Math.abs(d[i])); sq += d[i] * d[i]; } return { peak, rms: Math.sqrt(sq / d.length) }; }, k);
     ok(a.rms > 0.004 && a.peak < 0.9, k + ' sound is audible and never clips (rms ' + a.rms.toFixed(3) + ', peak ' + a.peak.toFixed(2) + ')');
   }

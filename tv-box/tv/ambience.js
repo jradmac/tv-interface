@@ -1,10 +1,10 @@
-// Ambient sound for the Rain and Jungle themes, synthesised with Web Audio (no files, works offline).
+// Ambient sound for the Rain, Snow and Jungle themes, synthesised with Web Audio (no files, works offline).
 // It fades in with the theme, follows the TV sounds switch, and stops completely while a service
 // is opening or the page is hidden, so it costs nothing during video.
 // Each soundscape is a few looping buffers built once (so the loop has no seam) through a handful
 // of native filter nodes, plus sparse one-off events (bird calls, thunder) scheduled a few seconds ahead.
 window.TVAmbience = (() => {
-  const LEVEL = { rain: 0.45, jungle: 0.85 };
+  const LEVEL = { rain: 0.45, snow: 0.6, jungle: 0.85 };
   const rnd = (a, b) => a + Math.random() * (b - a);
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
   const cache = {};
@@ -117,6 +117,43 @@ window.TVAmbience = (() => {
     s.start(at, Math.random() * 4); s.stop(at + dur + 0.1);
   }
 
+  // ---------- Snow ----------
+  // Snowfall is nearly silent, so this is the hush around it: a low wind that rises and settles, a thin
+  // whistle when it gusts, the faintest hiss of falling snow, and now and then a wind chime far away.
+  function snow(c, out, at) {
+    const src = [];
+    const low = loop(c, noise(c, 7, 'pink'), at, 0.6), lowF = filt(c, 'bandpass', 380, 0.8), lowG = amp(c, 0.5);
+    low.connect(lowF).connect(lowG).connect(out);
+    const gust = loop(c, noise(c, 7, 'pink'), at, 0.9), gustF = filt(c, 'bandpass', 850, 9), gustG = amp(c, 0.05);
+    gust.connect(gustF).connect(pan(c, 0.3)).connect(gustG).connect(out);
+    const hiss = loop(c, noise(c, 7, 'pink'), at, 1.5), hissG = amp(c, 0.03);
+    hiss.connect(filt(c, 'highpass', 5000)).connect(hissG).connect(out);
+    src.push(low, gust, hiss,
+      lfo(c, 0.06, 0.24, lowG.gain, at), lfo(c, 0.043, 150, lowF.frequency, at), lfo(c, 0.027, 0.12, lowG.gain, at),
+      lfo(c, 0.09, 260, gustF.frequency, at), lfo(c, 0.13, 0.04, gustG.gain, at));
+    const NOTES = [1046.5, 1174.7, 1318.5, 1568, 1760, 2093];
+    let next = at + rnd(6, 14);
+    return {
+      src,
+      events(until) {
+        while (next < until) {
+          const n = 1 + Math.floor(Math.random() * 3), p = pan(c, rnd(-0.7, 0.7));
+          p.connect(out);
+          for (let i = 0; i < n; i++) {
+            const f = pick(NOTES), t0 = next + i * rnd(0.18, 0.6), peak = rnd(0.012, 0.03);
+            for (const [mul, lv, tau] of [[1, 1, 0.9], [2.76, 0.3, 0.35]]) {   // a bell: a pure tone and one bright partial that dies quickly
+              const o = c.createOscillator(), g = amp(c, 0);
+              o.frequency.value = f * mul;
+              g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(peak * lv, t0 + 0.006); g.gain.setTargetAtTime(0, t0 + 0.006, tau);
+              o.connect(g).connect(p); o.start(t0); o.stop(t0 + tau * 7);
+            }
+          }
+          next += rnd(9, 26);
+        }
+      },
+    };
+  }
+
   // ---------- Jungle ----------
   // One note of a call: an oscillator with a pitch glide and a soft envelope. `am` adds a fast flutter.
   function note(c, dest, { at, dur, f0, f1 = f0, peak, type = 'sine', am = 0, attack = 0.012 }) {
@@ -211,7 +248,7 @@ window.TVAmbience = (() => {
       },
     };
   }
-  const BUILD = { rain, jungle };
+  const BUILD = { rain, snow, jungle };
 
   // ---------- Running it ----------
   let live = null;   // { k, c, g, scape, timer }

@@ -753,6 +753,7 @@
     { k: 'nature', name: 'Nature', sw: 'linear-gradient(160deg,#9CC3D9 0%,#E7C9A0 45%,#4E7A5A 46%,#22402F 100%)' },
     { k: 'tech', name: 'Tech', sw: 'radial-gradient(circle at 30% 70%,#3B7BFF 0,#0D1424 45%,#06080D 100%)' },
     { k: 'rain', name: 'Rain', sw: 'linear-gradient(170deg,#3A4C5E 0%,#18222C 55%,#0A0F15 100%)' },
+    { k: 'snow', name: 'Snow', sw: 'linear-gradient(175deg,#2C3E5E 0%,#16233A 52%,#DCE8F5 53%,#9FB6D0 100%)' },
     { k: 'jungle', name: 'Jungle', sw: 'radial-gradient(circle at 60% 35%,#BFE8A8 0,#2F7A4A 30%,#12301F 62%,#06110A 100%)' },
     { k: 'aurora', name: 'Aurora', sw: 'linear-gradient(160deg,#7A5AE0 0%,#2BD9A8 42%,#0B1C24 70%,#050B12 100%)' },
   ];
