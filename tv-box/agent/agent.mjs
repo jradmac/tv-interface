@@ -660,6 +660,7 @@ class Agent {
   }
 
   toast(text, ms) {
+    if (this.isHome(this.url)) return;   // Home shows its own bubble (the TV page gets the same messages)
     this.cdp.eval(`window.__tv && __tv.toast(${JSON.stringify(String(text).slice(0, 120))}, ${ms || 3000})`).catch(() => {});
   }
 

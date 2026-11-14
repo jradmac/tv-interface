@@ -92,7 +92,7 @@
     if (mode === 'apps') { gridIn(m.focus && m.focus.k); quickMirror(m.quick); } else gridOut();
     // What's on the TV, for "+ Quick Add" (any web page; not the box's own pages).
     tvPage = mode === 'service' && /^https?:\/\//.test(m.url || '') && !/^https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(m.url) ? { url: m.url, title: m.title || '' } : null;
-    $('qaddBtn').hidden = !tvPage;
+    $('qaddBtn').hidden = !tvPage; $('qaddWeb').hidden = !tvPage;
     const web = mode === 'service' && m.k === 'chrome';
     app.classList.toggle('web', web);
     if (web) showAddr(m.url, m.title);
@@ -199,7 +199,7 @@
     add.innerHTML = `<i>${PLUS}</i><span>Add</span>`;
     add.addEventListener('click', () => openQuickSheet(null));
     qtilesBox.appendChild(add);
-    $('qhint').textContent = quick.length ? 'Tap one to open it' : 'Open a video or page on the TV, then tap + Quick Add on the touchpad';
+    $('qhint').textContent = quick.length ? 'Tap one to open it' : 'Open a video or page on the TV, then tap + next to Play / Pause';
     $('quickHint').textContent = quick.length ? String(quick.length) : '';
     if (!$('qsheet').hidden) paintQuickList();
   }
@@ -312,8 +312,7 @@
       box.appendChild(row);
     });
   }
-  $('qaddBtn').addEventListener('click', () => { buzz(8); openQuickSheet(tvPage); });
-  ['pointerdown', 'pointerup', 'pointermove'].forEach((ev) => $('qaddBtn').addEventListener(ev, (e) => e.stopPropagation()));
+  ['qaddBtn', 'qaddWeb'].forEach((id) => $(id).addEventListener('click', () => { buzz(8); openQuickSheet(tvPage); }));
   $('quickLine').addEventListener('click', () => openQuickSheet(tvPage));
   $('qsX').addEventListener('click', () => { qsheet.hidden = true; qsName.blur(); qsUrl.blur(); });
   qsheet.addEventListener('click', (e) => { if (e.target === qsheet) qsheet.hidden = true; });
@@ -469,7 +468,7 @@
   let backHold = 0;
   $('back').addEventListener('pointerdown', () => { backHold = setTimeout(() => { link.send({ t: 'home' }); buzz(20); backHold = -1; }, 600); });
   $('back').addEventListener('pointerup', () => { if (backHold > 0) clearTimeout(backHold); });
-  document.querySelectorAll('.mbtn').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('.mbtn[data-a]').forEach((b) => b.addEventListener('click', () => {
     const a = b.dataset.a;
     link.send({ t: 'media', a: a.startsWith('vol') ? 'vol' : a, v: a === 'volup' ? 10 : a === 'voldown' ? -10 : undefined });
     buzz();
@@ -754,6 +753,7 @@
     { k: 'tech', name: 'Tech', sw: 'radial-gradient(circle at 30% 70%,#3B7BFF 0,#0D1424 45%,#06080D 100%)' },
     { k: 'rain', name: 'Rain', sw: 'linear-gradient(170deg,#3A4C5E 0%,#18222C 55%,#0A0F15 100%)' },
     { k: 'snow', name: 'Snow', sw: 'linear-gradient(175deg,#2C3E5E 0%,#16233A 52%,#DCE8F5 53%,#9FB6D0 100%)' },
+    { k: 'beach', name: 'Beach', sw: 'linear-gradient(180deg,#2A2250 0%,#C2566B 36%,#FFB56B 51%,#27406A 52%,#1A2748 82%,#4A3644 83%,#3A2A3A 100%)' },
     { k: 'jungle', name: 'Jungle', sw: 'radial-gradient(circle at 60% 35%,#BFE8A8 0,#2F7A4A 30%,#12301F 62%,#06110A 100%)' },
     { k: 'aurora', name: 'Aurora', sw: 'linear-gradient(160deg,#7A5AE0 0%,#2BD9A8 42%,#0B1C24 70%,#050B12 100%)' },
   ];

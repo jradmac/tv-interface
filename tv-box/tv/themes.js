@@ -1,5 +1,5 @@
-// TV themes: Light (default), Dark, Nature (photos), and five animated ones: Tech, Rain, Snow, Jungle, Aurora.
-// Rain, Snow and Jungle also have ambient sound (ambience.js).
+// TV themes: Light (default), Dark, Nature (photos), and four animated ones: Tech, Rain, Jungle, Aurora.
+// Rain and Jungle also have ambient sound (ambience.js).
 // Applied as <html data-theme>.
 // Nature photos are bundled on the box: /themes/nature/list.json = [{src, credit}] (the installer writes it).
 // Until those exist, Nature shows painted scenes drawn here, so it always works offline.
@@ -12,6 +12,7 @@ window.TVTheme = (() => {
     { k: 'tech', name: 'Tech', sw: 'radial-gradient(circle at 30% 70%,#3B7BFF 0,#0D1424 45%,#06080D 100%)' },
     { k: 'rain', name: 'Rain', sw: 'linear-gradient(170deg,#3A4C5E 0%,#18222C 55%,#0A0F15 100%)' },
     { k: 'snow', name: 'Snow', sw: 'linear-gradient(175deg,#2C3E5E 0%,#16233A 52%,#DCE8F5 53%,#9FB6D0 100%)' },
+    { k: 'beach', name: 'Beach', sw: 'linear-gradient(180deg,#2A2250 0%,#C2566B 36%,#FFB56B 51%,#27406A 52%,#1A2748 82%,#4A3644 83%,#3A2A3A 100%)' },
     { k: 'jungle', name: 'Jungle', sw: 'radial-gradient(circle at 60% 35%,#BFE8A8 0,#2F7A4A 30%,#12301F 62%,#06110A 100%)' },
     { k: 'aurora', name: 'Aurora', sw: 'linear-gradient(160deg,#7A5AE0 0%,#2BD9A8 42%,#0B1C24 70%,#050B12 100%)' },
   ];
@@ -462,7 +463,107 @@ window.TVTheme = (() => {
     },
   };
 
-  const FX = { tech, aurora, rain, snow, jungle };
+  // Beach: the sun going down over the sea. Its light shimmers on the water, swells roll in, the surf
+  // washes up the sand and slides back, clouds drift, gulls glide, and palm fronds sway overhead.
+  let shore = null, sunGlow = null, cloudImg = null, clouds = [], glit = [], gulls = [], palms = [];
+  const beach = {
+    seed() {
+      const HZ = 350, SX = 175;
+      beach.HZ = HZ; beach.SX = SX;
+      shore = sprite(W, H, (g) => {                              // painted once: sky, sun, sea, sand
+        const sky = g.createLinearGradient(0, 0, 0, HZ);
+        [[0, '#12112E'], [.45, '#2E2452'], [.72, '#7A3F68'], [.9, '#D9695F'], [1, '#FFB56B']].forEach(([o, c]) => sky.addColorStop(o, c));
+        g.fillStyle = sky; g.fillRect(0, 0, W, HZ);
+        const sun = g.createRadialGradient(SX, HZ - 12, 0, SX, HZ - 12, 34);
+        sun.addColorStop(0, '#FFF3D0'); sun.addColorStop(.8, '#FFD08A'); sun.addColorStop(1, 'rgba(255,190,120,0)');
+        g.fillStyle = sun; g.beginPath(); g.arc(SX, HZ - 12, 34, 0, TAU); g.fill();
+        const sea = g.createLinearGradient(0, HZ, 0, 505);
+        [[0, '#8A4E66'], [.1, '#4A3A66'], [.45, '#1F2B52'], [1, '#141E3C']].forEach(([o, c]) => sea.addColorStop(o, c));
+        g.fillStyle = sea; g.fillRect(0, HZ, W, 505 - HZ);
+        const sand = g.createLinearGradient(0, 498, 0, H);
+        sand.addColorStop(0, '#4A3644'); sand.addColorStop(1, '#2C2030');
+        g.fillStyle = sand; g.beginPath(); g.moveTo(0, H);
+        for (let x = 0; x <= W; x += 16) g.lineTo(x, 501 + Math.sin(x * .006) * 3 + Math.sin(x * .017 + 1) * 1.5);
+        g.lineTo(W, H); g.fill();
+      });
+      sunGlow = glow(128, [[0, 'rgba(255,200,130,.6)'], [.4, 'rgba(255,140,100,.2)'], [1, 'rgba(255,110,110,0)']]);
+      cloudImg = glow(64, [[0, 'rgba(255,170,150,.55)'], [.5, 'rgba(230,120,140,.22)'], [1, 'rgba(200,100,150,0)']]);
+      clouds = Array.from({ length: 6 }, (_, i) => ({ x: Math.random() * W, y: 200 + Math.random() * 120, w: 220 + Math.random() * 260, h: 16 + Math.random() * 22, v: .03 + Math.random() * .06, a: .5 + Math.random() * .4 }));
+      // Glitter: short dashes of sunlight on the water, in a path that widens toward the viewer.
+      glit = Array.from({ length: 90 }, () => { const u = Math.pow(Math.random(), 1.5); return { u, o: Math.random() - .5, p: Math.random() * TAU, s: .6 + Math.random() * 1.6 }; });
+      gulls = Array.from({ length: 3 }, (_, i) => ({ x: Math.random() * W, y: 110 + Math.random() * 150, v: (i % 2 ? -1 : 1) * (.25 + Math.random() * .25), p: Math.random() * TAU, s: .7 + Math.random() * .6 }));
+      const frond = sprite(300, 300, (g) => {
+        g.translate(0, 150); g.fillStyle = '#0B0916';
+        for (let i = 1; i <= 19; i++) {
+          const u = i / 20, x = 16 + u * 262, y = u * u * 44, len = Math.pow(Math.sin(Math.PI * Math.min(1, u * 1.08)), .6) * 92 + 12;
+          for (const side of [-1, 1]) {
+            const an = side * (1.02 - u * .35), dx = Math.cos(an), dy = Math.sin(an), mx = x + dx * len * .5, my = y + dy * len * .5, w = 6.5;
+            g.beginPath(); g.moveTo(x, y);
+            g.quadraticCurveTo(mx - dy * w, my + dx * w, x + dx * len, y + dy * len + 3);
+            g.quadraticCurveTo(mx + dy * w, my - dx * w, x, y); g.fill();
+          }
+        }
+        g.lineCap = 'round'; g.lineWidth = 3.5; g.strokeStyle = '#1B1630'; g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(140, 0, 280, 44); g.stroke();
+      });
+      const leaf = (x, y, deg, sc, flip = 1) => ({ img: frond, x, y, a: deg * Math.PI / 180, sc, amp: 4 * Math.PI / 180, flip, sp: .7 + Math.random() * .8, p: Math.random() * TAU });
+      palms = [leaf(-30, -30, 16, .95), leaf(-30, -30, 44, 1.05), leaf(-20, -40, 72, .8), leaf(990, -30, 164, .95, -1), leaf(990, -30, 136, 1.05, -1), leaf(980, -40, 108, .8, -1)];
+    },
+    draw(dt) {
+      const HZ = beach.HZ, SX = beach.SX;
+      ctx.drawImage(shore, 0, 0);
+      for (const c of clouds) {
+        c.x += c.v * dt; if (c.x > W + c.w / 2) c.x = -c.w / 2;
+        ctx.globalAlpha = c.a; ctx.drawImage(cloudImg, c.x - c.w / 2, c.y, c.w, c.h);
+      }
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = .8 + .08 * Math.sin(t * 3);
+      ctx.drawImage(sunGlow, SX - 210, HZ - 190, 420, 340);
+      ctx.fillStyle = 'rgb(255,196,128)';
+      for (const g of glit) {
+        const a = Math.sin(g.p + t * 14 * g.s);
+        if (a < 0) continue;
+        const y = HZ + 3 + g.u * 148, half = 10 + g.u * 120, len = 5 + g.u * 22;
+        ctx.globalAlpha = a * (.75 - g.u * .45);
+        ctx.fillRect(SX + g.o * 2 * half - len / 2, y, len, 1 + g.u);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;   // the glitter above leaves its last twinkle's alpha behind
+      // Swells: faint lines that start at the horizon and spread apart as they come in.
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 7; i++) {
+        const f = (i / 7 + t * .045) % 1, y = HZ + 6 + Math.pow(f, 1.9) * 142;
+        ctx.strokeStyle = `rgba(255,214,200,${.04 + f * .1})`;
+        ctx.beginPath();
+        for (let x = 0; x <= W; x += 24) { const yy = y + Math.sin(x * .016 + i * 2.1 + t * 2) * (1 + f * 3); x ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy); }
+        ctx.stroke();
+      }
+      // The surf: two sheets of water run up the sand and slide back, each edged with foam.
+      for (const ph of [0, 2.3]) {
+        const adv = .5 + .5 * Math.sin(t * 3.4 + ph), back = Math.cos(t * 3.4 + ph) < 0;
+        const edge = (x) => 502 + adv * 27 + Math.sin(x * .008 + ph * 3 + t) * 3 + Math.sin(x * .021 + ph) * 2;
+        ctx.beginPath(); ctx.moveTo(0, 498);
+        for (let x = 0; x <= W; x += 16) ctx.lineTo(x, edge(x));
+        ctx.lineTo(W, 498); ctx.closePath();
+        ctx.fillStyle = 'rgba(30,44,84,.5)'; ctx.fill();
+        ctx.beginPath();
+        for (let x = 0; x <= W; x += 16) x ? ctx.lineTo(x, edge(x)) : ctx.moveTo(x, edge(x));
+        ctx.lineWidth = 2.4; ctx.strokeStyle = `rgba(255,236,226,${back ? .28 + adv * .3 : .5 + adv * .35})`; ctx.stroke();   // brightest as it surges in
+      }
+      // Gulls gliding home.
+      ctx.strokeStyle = 'rgba(16,13,34,.85)'; ctx.lineWidth = 1.5;
+      for (const g of gulls) {
+        g.x += g.v * dt; g.p += .09 * dt;
+        if (g.x > W + 20) g.x = -20; else if (g.x < -20) g.x = W + 20;
+        const y = g.y + Math.sin(g.p * .2) * 6, w = 9 * g.s, lift = Math.sin(g.p) * 3.5 * g.s;
+        ctx.beginPath(); ctx.moveTo(g.x - w, y - lift); ctx.quadraticCurveTo(g.x - w * .4, y - 3 * g.s - lift * .3, g.x, y);
+        ctx.quadraticCurveTo(g.x + w * .4, y - 3 * g.s - lift * .3, g.x + w, y - lift); ctx.stroke();
+      }
+      for (const l of palms) jungle.leaf(l);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    },
+  };
+
+  const FX = { tech, aurora, rain, snow, jungle, beach };
   function frame(now) {
     raf = requestAnimationFrame(frame);
     if (now - last < 33) return;              // ~30 fps is plenty for a background

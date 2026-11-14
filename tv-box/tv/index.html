@@ -8,11 +8,36 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/tokens.css">
 <link rel="stylesheet" href="tv.css">
+<script>
+  // Before the first paint: put the saved theme on, and if we're arriving from a space switch, raise the
+  // curtain with the new space's name right away, so the reload never shows the new row before the curtain.
+  (function () {
+    var d = document.documentElement;
+    try {
+      var t = localStorage.getItem('tv-theme');
+      if (t && t !== 'light') d.dataset.theme = t;
+      var e = JSON.parse(sessionStorage.getItem('tv-space-enter') || 'null');
+      if (e && e.name) {
+        d.classList.add('sp-enter');
+        d.style.setProperty('--sfx-name', JSON.stringify(String(e.name)));
+        d.style.setProperty('--sfx-sub', JSON.stringify(String(e.sub || '')));
+      }
+    } catch (x) {}
+  })();
+</script>
 </head>
 <body>
 <!-- Everything is laid out at 1920×1080 and scaled to the screen. -->
 <div id="screen" class="screen">
+<script>
+  // Scale the 1920×1080 layout before the first paint too (tv.js keeps it fitted after that).
+  (function (el) { var s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    el.style.transform = 'translate(' + (innerWidth - 1920 * s) / 2 + 'px,' + (innerHeight - 1080 * s) / 2 + 'px) scale(' + s + ')'; })(document.getElementById('screen'));
+</script>
   <div class="room"></div>
+  <!-- Switching spaces: the new space's name, between the old row and the new one. It sits first (above
+       everything by z-index), so a reload paints the curtain before any of the page under it. -->
+  <section class="spacefx" id="spacefx" aria-live="polite"><div class="sfx-name" id="sfxName"></div><div class="sfx-sub" id="sfxSub"></div></section>
 
   <header class="top">
     <div class="clock" id="clock">8:42</div>
@@ -93,8 +118,6 @@
     <span class="ag-stop" id="agStop">Stop on your phone</span>
   </aside>
 
-  <!-- Switching spaces: the new space's name, between the old row and the new one. -->
-  <section class="spacefx" id="spacefx" aria-live="polite"><div class="sfx-name" id="sfxName"></div><div class="sfx-sub" id="sfxSub"></div></section>
 
   <div class="toast" id="toast"></div>
 </div>

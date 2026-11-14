@@ -616,12 +616,13 @@ struct ThemeRow: View {
         Choice(k: "tech", name: "Tech", swatch: [Color(hex: 0x3B7BFF), Color(hex: 0x0D1424), Color(hex: 0x06080D)]),
         Choice(k: "rain", name: "Rain", swatch: [Color(hex: 0x3A4C5E), Color(hex: 0x18222C), Color(hex: 0x0A0F15)]),
         Choice(k: "snow", name: "Snow", swatch: [Color(hex: 0x2C3E5E), Color(hex: 0x16233A), Color(hex: 0xDCE8F5), Color(hex: 0x9FB6D0)]),
+        Choice(k: "beach", name: "Beach", swatch: [Color(hex: 0x2A2250), Color(hex: 0xC2566B), Color(hex: 0xFFB56B), Color(hex: 0x27406A)]),
         Choice(k: "jungle", name: "Jungle", swatch: [Color(hex: 0xBFE8A8), Color(hex: 0x2F7A4A), Color(hex: 0x12301F), Color(hex: 0x06110A)]),
         Choice(k: "aurora", name: "Aurora", swatch: [Color(hex: 0x7A5AE0), Color(hex: 0x2BD9A8), Color(hex: 0x0B1C24), Color(hex: 0x050B12)]),
     ]
 
-    /// Eight themes don't fit on one line of a phone, so they sit on two rows of four.
-    private static let rows: [[Choice]] = [Array(themes.prefix(4)), Array(themes.dropFirst(4))]
+    /// Nine themes don't fit on one line of a phone, so they sit on three rows of three.
+    private static let rows: [[Choice]] = stride(from: 0, to: themes.count, by: 3).map { Array(themes[$0..<min($0 + 3, themes.count)]) }
 
     var body: some View {
         VStack(alignment: compact ? .center : .leading, spacing: compact ? 6 : 8) {

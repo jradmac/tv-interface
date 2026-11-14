@@ -206,19 +206,14 @@
   const agEl = $('agent');
   $('agMark').innerHTML = window.SERVICE_MARK('claude', '#D97757', 28);
   let agTimer = 0;
+  // Jared wants only the plain white bubble while Claude works, no Claude pill: every step shows as the toast.
+  // (The box no longer draws its own page bubble on Home, so there's exactly one.)
   function agent(phase, text) {
     clearTimeout(agTimer);
     const end = phase === 'done' || phase === 'fail' || phase === 'stopped';
     const t = text || (phase === 'stopped' ? 'Stopped' : phase === 'done' ? 'Done' : phase === 'fail' ? 'Couldn’t finish that' : '');
-    if (t && $('agText').textContent !== t) {
-      const span = $('agText');
-      span.textContent = t;
-      span.style.animation = 'none'; void span.offsetWidth; span.style.animation = '';   // replay the rise for each step
-    }
-    agEl.classList.remove('done', 'fail', 'stopped');
-    if (end) agEl.classList.add(phase);
-    agEl.classList.add('on'); $('screen').classList.add('ag-on');
-    if (end) agTimer = setTimeout(() => { agEl.classList.remove('on'); $('screen').classList.remove('ag-on'); }, phase === 'fail' ? 5000 : phase === 'stopped' ? 1600 : 2800);
+    agEl.classList.remove('on'); $('screen').classList.remove('ag-on');
+    if (t) toast(t, end ? (phase === 'fail' ? 5000 : phase === 'stopped' ? 1600 : 2800) : 8000);
   }
   function moveResult(n) {
     const was = rsel;
@@ -351,7 +346,7 @@
   }
 
   let toastTimer = 0;
-  function toast(text) {
+  function toast(text, ms) {
     const t = $('toast');
     t.textContent = text;
     t.classList.add('on');

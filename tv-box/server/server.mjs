@@ -200,7 +200,7 @@ function acceptWs(req, socket) {
 // ---------------------------------------------------------------------------------------
 // The room: same messages as before, now in one process on the box.
 
-const THEMES = ['light', 'dark', 'nature', 'tech', 'rain', 'snow', 'jungle', 'aurora'];
+const THEMES = ['light', 'dark', 'nature', 'tech', 'rain', 'snow', 'beach', 'jungle', 'aurora'];
 // "turn off the tv", "tv on", "switch the tv off" -> true/false; anything else null.
 function powerFromSpeech(text) {
   const low = String(text).toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim()

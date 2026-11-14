@@ -1,10 +1,10 @@
-// Ambient sound for the Rain, Snow and Jungle themes, synthesised with Web Audio (no files, works offline).
+// Ambient sound for the Rain and Jungle themes, synthesised with Web Audio (no files, works offline).
 // It fades in with the theme, follows the TV sounds switch, and stops completely while a service
 // is opening or the page is hidden, so it costs nothing during video.
 // Each soundscape is a few looping buffers built once (so the loop has no seam) through a handful
 // of native filter nodes, plus sparse one-off events (bird calls, thunder) scheduled a few seconds ahead.
 window.TVAmbience = (() => {
-  const LEVEL = { rain: 0.45, snow: 0.6, jungle: 0.85 };
+  const LEVEL = { rain: 0.45, snow: 0.6, jungle: 0.85, beach: 0.7 };
   const rnd = (a, b) => a + Math.random() * (b - a);
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
   const cache = {};
@@ -248,7 +248,49 @@ window.TVAmbience = (() => {
       },
     };
   }
-  const BUILD = { rain, snow, jungle };
+  // ---------- Beach ----------
+  // Surf on a quiet beach. Under everything is the far-off roar of the open sea. Each wave is its own
+  // event: it gathers (a dull swell that brightens), breaks, and then fizzes away up the sand.
+  // Waves come 7 to 11 seconds apart and differ in size, so they overlap and never fall into a beat.
+  function beach(c, out, at) {
+    const src = [];
+    const far = loop(c, noise(c, 7, 'pink'), at, 0.5), farG = amp(c, 0.3);
+    far.connect(filt(c, 'lowpass', 260)).connect(farG).connect(out);
+    const air = loop(c, noise(c, 7, 'pink'), at), airG = amp(c, 0.035);
+    air.connect(filt(c, 'bandpass', 1000, 0.5)).connect(airG).connect(out);
+    src.push(far, air, lfo(c, 0.05, 0.08, farG.gain, at), lfo(c, 0.07, 0.012, airG.gain, at));
+    const pink = noise(c, 7, 'pink');
+    let next = at + 0.5, gull = at + rnd(15, 40);
+    function wave(t0) {
+      const size = rnd(0.6, 1), rise = rnd(2.6, 3.8), brk = t0 + rise, where = pan(c, rnd(-0.5, 0.5));
+      where.connect(out);
+      // The body of the wave.
+      const b = c.createBufferSource(), lp = filt(c, 'lowpass', 220, 0.6), g = amp(c, 0);
+      b.buffer = pink; b.loop = true;
+      lp.frequency.setValueAtTime(220, t0); lp.frequency.exponentialRampToValueAtTime(700, brk - 0.5); lp.frequency.exponentialRampToValueAtTime(3400 * size, brk + 0.3); lp.frequency.setTargetAtTime(450, brk + 0.45, 1.7);
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.26 * size, brk - 0.5); g.gain.exponentialRampToValueAtTime(0.46 * size, brk + 0.3); g.gain.setTargetAtTime(0, brk + 0.4, 1.6);
+      b.connect(lp).connect(g).connect(where); b.start(t0, Math.random() * 6); b.stop(brk + 10);
+      // The foam hissing up the sand and draining back.
+      const f = c.createBufferSource(), fg = amp(c, 0);
+      f.buffer = pink; f.loop = true; f.playbackRate.value = 1.7;
+      fg.gain.setValueAtTime(0.0001, brk - 0.2); fg.gain.exponentialRampToValueAtTime(0.13 * size, brk + 0.5); fg.gain.setTargetAtTime(0, brk + 0.9, 1.9);
+      f.connect(filt(c, 'highpass', 3200)).connect(fg).connect(where); f.start(brk - 0.2, Math.random() * 6); f.stop(brk + 11);
+    }
+    return {
+      src,
+      events(until) {
+        while (next < until) { wave(next); next += rnd(7, 11); }
+        while (gull < until) {                                  // a gull, far down the beach
+          const p = pan(c, rnd(-0.8, 0.8)), n = 2 + Math.floor(Math.random() * 4), f = rnd(1500, 1900), v = rnd(0.01, 0.022);
+          p.connect(out);
+          for (let i = 0; i < n; i++) for (const [m, lv] of [[1, 1], [2, 0.5], [3, 0.2]]) note(c, p, { at: gull + i * 0.34, dur: 0.24, f0: f * m * 1.18, f1: f * m * 0.86, peak: v * lv, attack: 0.03 });
+          gull += rnd(30, 75);
+        }
+      },
+    };
+  }
+
+  const BUILD = { rain, snow, jungle, beach };
 
   // ---------- Running it ----------
   let live = null;   // { k, c, g, scape, timer }

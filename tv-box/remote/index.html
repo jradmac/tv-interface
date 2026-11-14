@@ -182,7 +182,7 @@
          transition:transform .25s var(--ease), box-shadow .25s}
   .tcard i{position:relative;display:block;aspect-ratio:16/9;border-radius:12px;overflow:hidden}
   .tcard i::after{content:"";position:absolute;left:30%;top:28%;width:40%;height:40%;border-radius:6px;background:#1C1B19;box-shadow:0 6px 12px -4px rgba(0,0,0,.4)}
-  .tcard[data-k="dark"] i::after,.tcard[data-k="tech"] i::after,.tcard[data-k="rain"] i::after,.tcard[data-k="snow"] i::after,.tcard[data-k="jungle"] i::after,.tcard[data-k="aurora"] i::after{background:#3A3834}
+  .tcard[data-k="dark"] i::after,.tcard[data-k="tech"] i::after,.tcard[data-k="rain"] i::after,.tcard[data-k="snow"] i::after,.tcard[data-k="beach"] i::after,.tcard[data-k="jungle"] i::after,.tcard[data-k="aurora"] i::after{background:#3A3834}
   .tcard.on{box-shadow:var(--rest),0 0 0 2.5px var(--ink)}
   .tcard.on span::after{content:" ✓"}
   .tcard:active{transform:scale(.97)}
@@ -323,8 +323,8 @@
   .qt.pick i{transform:scale(1.25);transition:transform .45s cubic-bezier(.2,1.2,.35,1)}
   .qsec.launch .qt:not(.pick){opacity:.3}
   /* "+ Quick Add" on the touchpad: save what the TV is showing. */
-  .qadd{margin-top:10px;display:flex;align-items:center;gap:7px;border:0;border-radius:999px;background:var(--room);color:var(--ink);font:600 14px Inter,system-ui;padding:10px 16px 10px 13px;transition:transform .2s var(--ease)}
-  .qadd:active{transform:scale(.95)}
+  .mbtn.qadd{flex:0 0 44px;height:44px;align-self:center;border-radius:14px;padding:0}
+  .qadd[hidden]{display:none !important}
   /* Quick Add sheet */
   .qform{display:flex;flex-direction:column;gap:12px}
   #qsUrl{font:500 15px Inter,system-ui}
@@ -363,12 +363,14 @@
     <button class="bb" id="navBack" aria-label="Back a page"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
     <button class="bb" id="navFwd" aria-label="Forward a page"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
     <form class="addr" id="addrForm" action="#"><input id="addr" type="search" enterkeyhint="go" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Search or type a web address" aria-label="Address"></form>
+    <button class="bb qadd" id="qaddWeb" hidden aria-label="Save to Quick Adds"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
     <button class="bb" id="navReload" aria-label="Reload"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg></button>
   </div>
 
   <div class="media" id="media">
     <button class="mbtn vid" data-a="back10">−10s</button>
     <button class="mbtn" data-a="playpause">Play / Pause</button>
+    <button class="mbtn qadd" id="qaddBtn" hidden aria-label="Save to Quick Adds"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
     <button class="mbtn vid" data-a="fwd10">+10s</button>
     <button class="mbtn mus" data-a="next" hidden>Next</button>
     <button class="mbtn" data-a="voldown">Vol −</button>
@@ -395,8 +397,7 @@
       <button class="cancel" id="pairGo">Connect</button>
       <div class="err" id="pairErr"></div>
     </div>
-    <div class="view" id="vPad"><div class="now">Touchpad</div><div class="svc" id="padSvc" style="font-size:20px"></div>
-      <button class="qadd" id="qaddBtn" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Quick Add</button></div>
+    <div class="view" id="vPad"><div class="now">Touchpad</div><div class="svc" id="padSvc" style="font-size:20px"></div></div>
     <div class="hint" id="hint">Swipe to move · Tap to open</div>
     <div class="spfx" id="spfx" aria-live="polite"><div class="n" id="spfxName"></div><div class="s" id="spfxSub"></div><div class="ld"><i></i><i></i><i></i></div></div>
     <div class="abar" id="abar" aria-live="polite">
