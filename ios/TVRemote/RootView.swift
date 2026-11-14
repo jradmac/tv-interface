@@ -72,6 +72,7 @@ struct RootView: View {
         .sheet(isPresented: $showPower) { TVPowerSheet() }
         .sheet(isPresented: $showKey) { KeySheet() }
         .sheet(isPresented: $showScan) { ScanSheet() }
+        .sheet(item: $link.quickDraft) { QuickAddSheet(draft: $0) }
         .alert(problemTitle, isPresented: Binding(get: { listener.problem != nil }, set: { if !$0 { listener.problem = nil } })) {
             if listener.problem != .unavailable {
                 Button("Open Settings") { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }

@@ -35,8 +35,25 @@ struct PadArea: View {
                 } else if st.mode == "countdown" {
                     CountdownView(say: st.countdownSay ?? "Playing", id: st.countdownID)
                 } else if st.mode == "service" {
-                    ServiceLabel(name: st.k == "chrome" ? (st.title.isEmpty ? "Chrome" : st.title) : Services.by(st.k).name)
-                        .allowsHitTesting(false)
+                    VStack(spacing: 18) {
+                        ServiceLabel(name: st.k == "chrome" ? (st.title.isEmpty ? "Chrome" : st.title) : Services.by(st.k).name)
+                            .allowsHitTesting(false)
+                        // Save what the TV is showing (a video, a playlist, any page) as a Quick Add.
+                        if let page = link.savablePage {
+                            Button {
+                                Haptics.tap()
+                                link.quickDraft = page
+                            } label: {
+                                Label("Quick Add", systemImage: "plus")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(Color.ink)
+                                    .padding(.vertical, 10).padding(.horizontal, 16)
+                                    .background(Capsule().fill(Color.room))
+                            }
+                            .buttonStyle(PressStyle())
+                            .transition(.opacity)
+                        }
+                    }
                 } else {
                     OnScreen()
                         .allowsHitTesting(false)
@@ -350,11 +367,13 @@ struct PairView: View {
 }
 
 /// All apps: the same tiles as the TV, in the same order. Tiles spring in; the picked one launches.
+/// Below the apps is a second page, Quick Adds: scrolling to it slides the TV's apps up too.
 struct AppsGrid: View {
     @EnvironmentObject var link: TVLink
     let selected: String?
     @State private var shown = false
     @State private var picked: String?
+    @State private var page: String? = "apps"
 
     private var list: [Service] { Services.inSpace(link.space) }
     private var cols: [GridItem] { Array(repeating: GridItem(.flexible(), spacing: 12), count: list.count > 8 ? 5 : 4) }
@@ -362,6 +381,39 @@ struct AppsGrid: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 32, style: .continuous).fill(.white)
+            ScrollView(.vertical) {
+                VStack(spacing: 0) {
+                    appsPage
+                        .containerRelativeFrame(.vertical)
+                        .id("apps")
+                    QuickPage(picked: $picked)
+                        .containerRelativeFrame(.vertical)
+                        .id("quick")
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $page)
+            .scrollIndicators(.hidden)
+            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+        }
+        .onAppear {
+            shown = true
+            if link.state.quickOn { page = "quick" }
+        }
+        // Scrolled here on the phone: tell the TV. Moved there on the TV (arrow keys): follow it.
+        .onChange(of: page) { _, p in
+            let on = p == "quick"
+            if on != link.state.quickOn { link.quickView(on); Haptics.tap() }
+        }
+        .onChange(of: link.state.quickOn) { _, on in
+            let want = on ? "quick" : "apps"
+            if page != want { withAnimation(.tv) { page = want } }
+        }
+    }
+
+    private var appsPage: some View {
+        ZStack(alignment: .bottom) {
             VStack(spacing: 22) {
                 Text("ALL APPS").font(.system(size: 12, weight: .medium)).tracking(1.7).foregroundStyle(Color.mute)
                     .opacity(picked == nil ? 1 : 0)
@@ -381,8 +433,23 @@ struct AppsGrid: View {
                     .opacity(picked == nil ? 1 : 0)
             }
             .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // A peek at the page below.
+            Button {
+                withAnimation(.tv) { page = "quick" }
+            } label: {
+                VStack(spacing: 2) {
+                    Text("QUICK ADDS").font(.system(size: 11, weight: .medium)).tracking(1.5)
+                    Image(systemName: "chevron.down").font(.system(size: 13, weight: .semibold))
+                        .symbolEffect(.bounce, options: .repeat(2), value: shown)
+                }
+                .foregroundStyle(Color.mute)
+                .padding(.bottom, 12)
+            }
+            .buttonStyle(PressStyle())
+            .opacity(picked == nil && shown ? 1 : 0)
+            .animation(.tv.delay(0.2), value: shown)
         }
-        .onAppear { shown = true }
     }
 
     private func tile(_ s: Service) -> some View {
@@ -419,6 +486,132 @@ struct AppsGrid: View {
         }
         .buttonStyle(PressStyle())
         .accessibilityLabel(s.name)
+    }
+}
+
+/// Quick Adds: saved links, one tap away. The last tile adds one.
+struct QuickPage: View {
+    @EnvironmentObject var link: TVLink
+    @Binding var picked: String?
+    private let cols = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
+
+    var body: some View {
+        VStack(spacing: 22) {
+            Text("QUICK ADDS").font(.system(size: 12, weight: .medium)).tracking(1.7).foregroundStyle(Color.mute)
+            LazyVGrid(columns: cols, spacing: 16) {
+                ForEach(link.quick) { q in tile(q) }
+                Button {
+                    Haptics.tap()
+                    link.quickDraft = QuickDraft()
+                } label: {
+                    VStack(spacing: 7) {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color.line, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.room))
+                            .aspectRatio(1, contentMode: .fit)
+                            .overlay(Image(systemName: "plus").font(.system(size: 20, weight: .semibold)).foregroundStyle(Color.ink2))
+                        Text("Add").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.mute)
+                    }
+                }
+                .buttonStyle(PressStyle())
+                .opacity(picked == nil ? 1 : 0.3)
+                .accessibilityLabel("Add a Quick Add")
+            }
+            .frame(maxWidth: 330)
+            Text(link.quick.isEmpty ? "Open a video or page on the TV, then tap + Quick Add on the touchpad" : "Tap one to open it")
+                .font(.system(size: 13)).foregroundStyle(Color.mute).multilineTextAlignment(.center)
+                .opacity(picked == nil ? 1 : 0)
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func tile(_ q: QuickAdd) -> some View {
+        let on = link.state.quickOn && link.state.quickID == q.id
+        return Button {
+            guard picked == nil else { return }
+            picked = q.id
+            Haptics.press()
+            link.openQuick(q.id)
+        } label: {
+            VStack(spacing: 7) {
+                QuickFace(k: q.k, icon: q.icon, radius: 16)
+                    .rest()
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 19, style: .continuous)
+                            .stroke(Color.ink, lineWidth: on ? 2 : 0)
+                            .padding(-4)
+                    )
+                    .offset(y: on ? -3 : 0)
+                    .scaleEffect(picked == q.id ? 1.25 : on ? 1.07 : 1)
+                    .animation(.tv, value: on)
+                    .animation(.spring(response: 0.45, dampingFraction: 0.7), value: picked)
+                Text(q.name)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(on ? Color.ink : Color.mute)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+            .opacity(picked == nil || picked == q.id ? 1 : 0.3)
+        }
+        .buttonStyle(PressStyle())
+        .accessibilityLabel(q.name)
+    }
+}
+
+/// The little icons a Quick Add can wear (same set and colors as the TV, shared/services.js).
+enum QuickIcons {
+    struct Icon: Identifiable {
+        let k: String
+        let name: String
+        let symbol: String
+        let bg: UInt32
+        let fg: UInt32
+        var id: String { k }
+    }
+    static let all: [Icon] = [
+        Icon(k: "play", name: "Play", symbol: "play", bg: 0xFDE8E4, fg: 0xC8442F),
+        Icon(k: "list", name: "Playlist", symbol: "list.bullet", bg: 0xE7EEFB, fg: 0x3C63B8),
+        Icon(k: "music", name: "Music", symbol: "music.note", bg: 0xF3E6F7, fg: 0x8A3FA6),
+        Icon(k: "star", name: "Star", symbol: "star", bg: 0xFCF1D6, fg: 0xA87304),
+        Icon(k: "heart", name: "Heart", symbol: "heart", bg: 0xFBE4EA, fg: 0xC23A5E),
+        Icon(k: "film", name: "Movie", symbol: "film", bg: 0xECE8F8, fg: 0x5A4AB0),
+        Icon(k: "book", name: "Learn", symbol: "book", bg: 0xE3F0FA, fg: 0x1F5F96),
+        Icon(k: "game", name: "Game", symbol: "gamecontroller", bg: 0xE8F3EC, fg: 0x2F7A4C),
+        Icon(k: "moon", name: "Wind down", symbol: "moon", bg: 0xE6E9F2, fg: 0x3B4566),
+        Icon(k: "flame", name: "Hype", symbol: "flame", bg: 0xFDEBDD, fg: 0xC8571B),
+        Icon(k: "globe", name: "Web", symbol: "globe", bg: 0xEEF0EC, fg: 0x4A5A50),
+    ]
+    static func find(_ k: String) -> Icon? { all.first { $0.k == k } }
+}
+
+/// A Quick Add's square face: its icon on a soft color, or ("auto") the app's own mark on the app's colors.
+struct QuickFace: View {
+    let k: String
+    let icon: String
+    var radius: CGFloat = 16
+
+    var body: some View {
+        let g = QuickIcons.find(icon)
+        let svc = g == nil && k != "chrome" ? Services.all.first(where: { $0.k == k }) : nil
+        let web = g ?? (svc == nil ? QuickIcons.find("globe") : nil)
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(web.map { AnyShapeStyle(Color(hex: $0.bg)) }
+                  ?? AnyShapeStyle(LinearGradient(colors: svc?.bg ?? [.white], startPoint: .topLeading, endPoint: .bottomTrailing)))
+            .aspectRatio(1, contentMode: .fit)
+            .overlay(GeometryReader { geo in
+                Group {
+                    if let web {
+                        Image(systemName: web.symbol)
+                            .font(.system(size: geo.size.width * 0.4, weight: .medium))
+                            .foregroundStyle(Color(hex: web.fg))
+                    } else if let svc {
+                        ServiceMark(service: svc, color: svc.tileMarkColor, size: geo.size.width * 0.52, onTile: true)
+                    }
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+            })
     }
 }
 

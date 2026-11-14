@@ -35,6 +35,13 @@ struct MoreSheet: View {
                 }) {
                     Text(keyOn == nil ? "" : keyOn! ? "On" : "Off").foregroundStyle(Color.mute)
                 }
+                LineButton(title: "Quick Adds", action: {
+                    dismiss()
+                    let page = link.savablePage ?? QuickDraft()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { link.quickDraft = page }
+                }) {
+                    Text(link.quick.isEmpty ? "" : "\(link.quick.count)").foregroundStyle(Color.mute)
+                }
                 Toggle(isOn: Binding(get: { link.sounds }, set: { link.setSounds($0); Haptics.tap() })) {
                     Text("TV sounds").font(.system(size: 15, weight: .medium)).foregroundStyle(Color.ink)
                 }
@@ -339,6 +346,187 @@ struct KeySheet: View {
             Haptics.warn()
         }
         saving = false
+    }
+}
+
+/// Quick Add: save a link as a tile under Apps. Opened from "+ Quick Add" with the page on the TV filled in,
+/// or empty to paste a link. The box suggests a name (the video's title), so usually no typing at all.
+struct QuickAddSheet: View {
+    @EnvironmentObject var link: TVLink
+    @Environment(\.dismiss) private var dismiss
+    let draft: QuickDraft
+    @State private var url = ""
+    @State private var name = ""
+    @State private var named = false
+    @State private var icon = "auto"
+    @State private var k = "chrome"
+    @State private var asked = ""
+    @State private var finding = false
+    @State private var saving = false
+    @State private var error = ""
+    @State private var removing: String?
+    @FocusState private var nameFocus: Bool
+
+    private let iconCols = Array(repeating: GridItem(.flexible(), spacing: 8), count: 6)
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                SheetTop(title: "Quick Adds") { dismiss() }
+                HStack(spacing: 14) {
+                    QuickFace(k: k, icon: icon, radius: 15)
+                        .frame(width: 58, height: 58)
+                        .rest()
+                        .animation(.tv, value: icon)
+                    VStack(alignment: .leading, spacing: 3) {
+                        TextField(finding ? "Finding a name…" : "Name", text: $name)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(Color.ink)
+                            .focused($nameFocus)
+                            .submitLabel(.done)
+                            .onChange(of: name) { _, v in if nameFocus { named = !v.trimmingCharacters(in: .whitespaces).isEmpty } }
+                        Text(host(url).isEmpty ? "Paste a link below" : host(url))
+                            .font(.system(size: 13)).foregroundStyle(Color.mute).lineLimit(1)
+                    }
+                }
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.white))
+                HStack(spacing: 8) {
+                    TextField("Paste a link", text: $url)
+                        .font(.system(size: 15, weight: .medium))
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.done)
+                        .onSubmit { peek() }
+                        .padding(.horizontal, 14)
+                        .frame(height: 48)
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white))
+                    Button("Paste") {
+                        if let s = UIPasteboard.general.string { url = s.trimmingCharacters(in: .whitespacesAndNewlines); Haptics.tap(); peek() }
+                    }
+                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(Color.ink)
+                    .padding(.horizontal, 14).frame(height: 48)
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white))
+                }
+                LazyVGrid(columns: iconCols, spacing: 8) {
+                    ForEach(["auto"] + QuickIcons.all.map(\.k), id: \.self) { key in
+                        Button {
+                            icon = key
+                            Haptics.tick()
+                        } label: {
+                            QuickFace(k: k, icon: key, radius: 14)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                        .stroke(Color.ink, lineWidth: icon == key ? 2 : 0)
+                                        .padding(-3)
+                                )
+                        }
+                        .buttonStyle(PressStyle(scale: 0.9))
+                        .accessibilityLabel(QuickIcons.find(key)?.name ?? "App logo")
+                        .accessibilityAddTraits(icon == key ? .isSelected : [])
+                    }
+                }
+                .padding(.vertical, 4)
+                CTAButton(title: saving ? "Saving…" : "Save to Quick Adds", busy: saving, action: save)
+                if !error.isEmpty {
+                    Text(error).font(.system(size: 14)).foregroundStyle(Color.danger)
+                }
+                if !link.quick.isEmpty {
+                    Text("SAVED").font(.system(size: 12, weight: .medium)).tracking(1.7).foregroundStyle(Color.mute).padding(.top, 6)
+                    ForEach(Array(link.quick.reversed())) { q in row(q) }
+                }
+            }
+            .padding(20)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .background(Color.room.ignoresSafeArea())
+        .presentationDetents([.large])
+        .presentationCornerRadius(28)
+        .onAppear {
+            url = draft.url
+            if !draft.url.isEmpty { peek() }
+        }
+        .task(id: url) {
+            // Typed or pasted a link: ask the box about it once typing pauses.
+            try? await Task.sleep(for: .milliseconds(600))
+            if !Task.isCancelled { peek() }
+        }
+        .onChange(of: link.quickPeek) { _, p in
+            guard let p, p.asked == asked else { return }
+            finding = false
+            if let e = p.error { error = e; return }
+            error = ""
+            k = p.k
+            if !p.url.isEmpty, !nameFocus { url = p.url; asked = p.url }
+            if !named, !p.name.isEmpty { name = p.name }
+        }
+        .onChange(of: link.quickResult) { _, r in
+            guard saving, let r else { return }
+            saving = false
+            if let e = r.error { error = e; Haptics.warn() } else { Haptics.success(); dismiss() }
+        }
+    }
+
+    private func row(_ q: QuickAdd) -> some View {
+        HStack(spacing: 12) {
+            QuickFace(k: q.k, icon: q.icon, radius: 10).frame(width: 38, height: 38)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(q.name).font(.system(size: 15, weight: .medium)).foregroundStyle(Color.ink).lineLimit(1)
+                Text(host(q.url)).font(.system(size: 12)).foregroundStyle(Color.mute).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Button {
+                if removing == q.id {
+                    link.removeQuick(q.id)
+                    removing = nil
+                    Haptics.press()
+                } else {
+                    removing = q.id
+                    Haptics.tap()
+                }
+            } label: {
+                Group {
+                    if removing == q.id { Text("Remove").font(.system(size: 13, weight: .semibold)).padding(.horizontal, 10) }
+                    else { Image(systemName: "xmark").font(.system(size: 12, weight: .bold)).frame(width: 32) }
+                }
+                .frame(height: 32)
+                .foregroundStyle(removing == q.id ? .white : Color.ink2)
+                .background(Capsule().fill(removing == q.id ? Color.danger : Color.room))
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityLabel("Remove \(q.name)")
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white))
+        .animation(.tv, value: removing)
+    }
+
+    private func host(_ s: String) -> String {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty, let h = URL(string: t.lowercased().hasPrefix("http") ? t : "https://" + t)?.host else { return "" }
+        return h.hasPrefix("www.") ? String(h.dropFirst(4)) : h
+    }
+
+    private func peek() {
+        let u = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !u.isEmpty, u != asked else { return }
+        asked = u
+        finding = !named
+        link.peekQuick(u, title: u == draft.url ? draft.title : "")
+    }
+
+    private func save() {
+        guard !saving else { return }
+        let u = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !u.isEmpty else { error = "Paste a link first."; return }
+        error = ""
+        saving = true
+        nameFocus = false
+        link.saveQuick(url: u, name: name.trimmingCharacters(in: .whitespaces), icon: icon, title: u == draft.url ? draft.title : "")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+            if saving { saving = false; error = "The TV box didn’t answer. Try again." }
+        }
     }
 }
 

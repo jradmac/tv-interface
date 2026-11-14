@@ -29,6 +29,38 @@ struct TVState: Equatable {
     var url = ""
     var title = ""
     var countdownID = 0
+    var quickOn = false          // Apps grid: the TV has slid up to Quick Adds
+    var quickID: String?         // …and this one is highlighted
+}
+
+/// A saved link (a YouTube video, a playlist, any page): a small tile under the Apps grid.
+struct QuickAdd: Identifiable, Equatable {
+    let id: String
+    var name: String
+    var url: String
+    var k: String                // the app it belongs to ("youtube", …) or "chrome"
+    var icon: String             // "auto" (the app's own mark) or a QuickIcons key
+}
+
+/// The Quick Add sheet is open: for the page on the TV (url filled in) or a pasted link (url empty).
+struct QuickDraft: Identifiable, Equatable {
+    var url = ""
+    var title = ""
+    let id = UUID()
+}
+
+struct QuickResult: Equatable {
+    let id = UUID()
+    var error: String?
+}
+
+/// The box's answer to "what is this link?": the clean link, its app and a name for it.
+struct QuickPeek: Equatable {
+    var asked = ""
+    var url = ""
+    var k = "chrome"
+    var name = ""
+    var error: String?
 }
 
 /// A text box on the TV has focus (or the phone opened the keyboard itself).
@@ -85,6 +117,11 @@ final class TVLink: ObservableObject {
     private var spaceTimer: DispatchWorkItem?
     @Published private(set) var game: GameInfo?
     @Published private(set) var toast: String?
+    @Published private(set) var quick: [QuickAdd] = []
+    @Published var quickDraft: QuickDraft?
+    @Published private(set) var quickPeek: QuickPeek?
+    /// Set when a save finishes: nil error means saved.
+    @Published private(set) var quickResult: QuickResult?
     @Published private(set) var pairing: Pairing?
     @Published private(set) var address: BoxAddress?
     /// Unpaired and the box can't be found on this Wi-Fi.
@@ -336,6 +373,19 @@ final class TVLink: ObservableObject {
         case "game":
             let running = m["running"] as? Bool ?? false
             game = running ? GameInfo(g: m["g"] as? String ?? "", title: m["title"] as? String ?? "Game") : nil
+        case "quick":
+            quick = (m["items"] as? [[String: Any]] ?? []).compactMap { (q: [String: Any]) -> QuickAdd? in
+                guard let id = q["id"] as? String, let url = q["url"] as? String else { return nil }
+                return QuickAdd(id: id, name: q["name"] as? String ?? "Link", url: url, k: q["k"] as? String ?? "chrome", icon: q["icon"] as? String ?? "auto")
+            }
+        case "quick.peek":
+            quickPeek = QuickPeek(asked: m["asked"] as? String ?? "", url: m["url"] as? String ?? "", k: m["k"] as? String ?? "chrome",
+                                  name: m["name"] as? String ?? "", error: m["error"] as? String)
+        case "quick.saved":
+            quickResult = QuickResult(error: nil)
+            if let item = m["item"] as? [String: Any], let name = item["name"] as? String { showToast("Saved “\(name)” · find it under Apps") }
+        case "quick.error":
+            quickResult = QuickResult(error: m["error"] as? String ?? "That didn’t save.")
         case "paired":
             if let name = m["name"] as? String, m["self"] == nil { showToast("\(name) paired with the TV") }
         default:
@@ -394,10 +444,31 @@ final class TVLink: ObservableObject {
         s.music = m["music"] as? Bool ?? false
         s.url = m["url"] as? String ?? ""
         s.title = m["title"] as? String ?? ""
+        if let q = m["quick"] as? [String: Any] {
+            s.quickOn = q["on"] as? Bool ?? false
+            s.quickID = q["id"] as? String
+        }
         if let t = m["theme"] as? String, t != theme { theme = t }
         if let sp = m["space"] as? String, sp != space, Services.spaces.contains(where: { $0.k == sp }) { space = sp }
         if s != state { state = s }
     }
+
+    // MARK: Quick Adds
+
+    /// The web page on the TV right now, if it can be saved as a Quick Add (not the box's own pages).
+    var savablePage: QuickDraft? {
+        guard state.mode == "service", let u = URL(string: state.url), let scheme = u.scheme, scheme.hasPrefix("http"),
+              let host = u.host, host != "127.0.0.1", host != "localhost" else { return nil }
+        return QuickDraft(url: state.url, title: state.title)
+    }
+    func peekQuick(_ url: String, title: String = "") { send(["t": "quick.peek", "url": url, "title": title]) }
+    func saveQuick(url: String, name: String, icon: String, title: String) {
+        send(["t": "quick.add", "url": url, "name": name, "icon": icon, "title": title])
+    }
+    func removeQuick(_ id: String) { send(["t": "quick.remove", "id": id]) }
+    func openQuick(_ id: String) { send(["t": "quick.open", "id": id]) }
+    /// The phone's Apps grid scrolled to Quick Adds (or back): the TV slides along.
+    func quickView(_ on: Bool) { send(["t": "quick.view", "on": on]) }
 
     // MARK: Hands-free agent, theme, sounds
 
