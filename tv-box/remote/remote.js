@@ -27,10 +27,20 @@
       else if (m.status === 'need-pair' || m.status === 'unpaired') { setConn(false, 'Not paired'); askCode(m.error); }
       return;
     }
-    if (m.t === 'state') { if (m.space && m.space !== space) setSpace(m.space); apply(m); if (m.theme && m.theme !== tvTheme) paintTheme(m.theme); }
+    if (m.t === 'state') {
+      // While the TV is still bringing up a new space, its updates describe the old one: hold the newest
+      // until the TV reports the new space, so the phone never flips back.
+      if (spWait) { spHeld = m; if ((m.tvSpace || m.space) === space) spaceArrived(); return; }
+      if (m.space && m.space !== space) setSpace(m.space);
+      apply(m); if (m.theme && m.theme !== tvTheme) paintTheme(m.theme);
+    }
     if (m.t === 'toast') flashTip(m.text);
+    if (m.t === 'quick') quickItems(m.items);
+    if (m.t === 'quick.peek') quickPeeked(m);
+    if (m.t === 'quick.saved') quickSaved(m.item);
+    if (m.t === 'quick.error') quickErr(m.error);
     if (m.t === 'tv.status') tvStatus(m);
-    if (m.t === 'space') setSpace(m.name);
+    if (m.t === 'space' && m.name !== space) { setSpace(m.name); spaceLoading(m.name); }   // switched on the TV or by voice
     if (m.t === 'sounds') paintSounds(m.on !== false);
     if (m.t === 'game' && m.running && !/[?&]demo\b/.test(location.search)) location.href = '/games/pad.html';
     if (m.t === 'intent' && m.kind === 'do') agentBar('start', m.say || m.heard);
@@ -79,7 +89,10 @@
     svcK = mode === 'service' ? m.k : null;
     setTermKeys();
     $('appsBtn').classList.toggle('on', mode === 'apps');
-    if (mode === 'apps') gridIn(m.focus && m.focus.k); else gridOut();
+    if (mode === 'apps') { gridIn(m.focus && m.focus.k); quickMirror(m.quick); } else gridOut();
+    // What's on the TV, for "+ Quick Add" (any web page; not the box's own pages).
+    tvPage = mode === 'service' && /^https?:\/\//.test(m.url || '') && !/^https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(m.url) ? { url: m.url, title: m.title || '' } : null;
+    $('qaddBtn').hidden = !tvPage;
     const web = mode === 'service' && m.k === 'chrome';
     app.classList.toggle('web', web);
     if (web) showAddr(m.url, m.title);
@@ -151,7 +164,7 @@
     gridOn = false;
     agrid.setAttribute('aria-hidden', 'true');
     if (!picked) agrid.classList.add('out');
-    gridTimer = setTimeout(() => agrid.classList.remove('on', 'in', 'out', 'launch'), picked ? 420 : 300);
+    gridTimer = setTimeout(() => { agrid.classList.remove('on', 'in', 'out', 'launch'); qsec.classList.remove('launch'); qtilesEls.forEach((t) => t.classList.remove('pick')); agrid.scrollTop = 0; qView = false; }, picked ? 420 : 300);
     tiles.forEach((t) => t.classList.remove('pick'));
   }
   function pick(k, b) {
@@ -161,6 +174,151 @@
     gridSel(k); b.classList.add('pick'); agrid.classList.add('launch');
     link.send({ t: 'apps.pick', k });
   }
+
+  // ---------- Quick Adds ----------
+  // In the Apps grid they're a second page below the apps: scrolling there tells the TV to slide up too.
+  const qsec = $('qsec'), qtilesBox = $('qtiles');
+  let quick = [], qtilesEls = [], qView = false, qQuietUntil = 0, tvPage = null;
+  const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
+  const escH = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="#5E5B55" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+  function quickItems(items) {
+    quick = Array.isArray(items) ? items : [];
+    qtilesBox.innerHTML = '';
+    qtilesEls = quick.map((q) => {
+      const f = window.QUICK_FACE(q, 72);
+      const b = document.createElement('button');
+      b.className = 'qt'; b.dataset.id = q.id;
+      b.innerHTML = `<i style="background:${f.bg}">${f.html}</i><span>${escH(q.name)}</span>`;
+      b.addEventListener('click', () => quickOpen(q.id, b));
+      qtilesBox.appendChild(b);
+      return b;
+    });
+    const add = document.createElement('button');
+    add.className = 'qt plus';
+    add.innerHTML = `<i>${PLUS}</i><span>Add</span>`;
+    add.addEventListener('click', () => openQuickSheet(null));
+    qtilesBox.appendChild(add);
+    $('qhint').textContent = quick.length ? 'Tap one to open it' : 'Open a video or page on the TV, then tap + Quick Add on the touchpad';
+    $('quickHint').textContent = quick.length ? String(quick.length) : '';
+    if (!$('qsheet').hidden) paintQuickList();
+  }
+  function quickOpen(id, b) {
+    if (!gridOn || picked) return;
+    picked = id;
+    buzz(12);
+    b.classList.add('pick'); qsec.classList.add('launch');
+    link.send({ t: 'quick.open', id });
+  }
+  // The TV moved into (or out of) Quick Adds: follow it. The phone's own scrolling sends quick.view.
+  function quickMirror(q) {
+    const on = !!(q && q.on);
+    qtilesEls.forEach((t) => t.classList.toggle('on', on && q.id === t.dataset.id));
+    if (on === qView) return;
+    qView = on; qQuietUntil = Date.now() + 700;
+    agrid.scrollTo({ top: on ? qsec.offsetTop : 0, behavior: 'smooth' });
+  }
+  let qScrollT = 0;
+  agrid.addEventListener('scroll', () => {
+    clearTimeout(qScrollT);
+    qScrollT = setTimeout(() => {
+      if (!gridOn || Date.now() < qQuietUntil) return;
+      const on = agrid.scrollTop > qsec.offsetTop / 2;
+      if (on !== qView) { qView = on; buzz(6); link.send({ t: 'quick.view', on }); }
+    }, 90);
+  }, { passive: true });
+  $('qpeek').addEventListener('click', () => agrid.scrollTo({ top: qsec.offsetTop, behavior: 'smooth' }));
+
+  // The Quick Add sheet: the page on the TV (or a pasted link), a name the box suggests, and an icon.
+  const qsheet = $('qsheet'), qsUrl = $('qsUrl'), qsName = $('qsName');
+  let qsK = 'chrome', qsIcon = 'auto', qsNamed = false, qsAsked = '', qsBusy = false;
+  function paintQuickFace() {
+    const f = window.QUICK_FACE({ k: qsK, icon: qsIcon }, 58);
+    $('qsFace').style.background = f.bg; $('qsFace').innerHTML = f.html;
+    const icons = [{ k: 'auto', name: 'App' }, ...window.QUICK_ICONS];
+    $('qsIcons').innerHTML = icons.map((g) => {
+      const f2 = window.QUICK_FACE({ k: qsK, icon: g.k }, 44);
+      return `<button role="radio" aria-checked="${g.k === qsIcon}" aria-label="${g.name}" data-i="${g.k}" class="${g.k === qsIcon ? 'on' : ''}" style="background:${f2.bg}">${f2.html}</button>`;
+    }).join('');
+  }
+  $('qsIcons').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; qsIcon = b.dataset.i; buzz(6); paintQuickFace(); });
+  function peek() {
+    const u = qsUrl.value.trim();
+    $('qsHost').textContent = host(/^https?:/i.test(u) ? u : 'https://' + u) || '';
+    if (!u || u === qsAsked) return;
+    qsAsked = u;
+    if (!qsNamed) qsName.placeholder = 'Finding a name…';
+    link.send({ t: 'quick.peek', url: u, title: tvPage && tvPage.url === u ? tvPage.title : '' });
+  }
+  function quickPeeked(m) {
+    if (qsheet.hidden || m.asked !== qsAsked) return;
+    qsName.placeholder = 'Name';
+    if (m.error) { $('qsErr').textContent = m.error; return; }
+    $('qsErr').textContent = '';
+    qsK = m.k || 'chrome';
+    $('qsHost').textContent = host(m.url);
+    if (m.url && document.activeElement !== qsUrl) { qsUrl.value = m.url; qsAsked = m.url; }
+    if (!qsNamed && m.name) qsName.value = m.name;
+    paintQuickFace();
+  }
+  function openQuickSheet(page) {
+    sheet.hidden = true;
+    qsheet.hidden = false;
+    qsK = 'chrome'; qsIcon = 'auto'; qsNamed = false; qsAsked = ''; qsBusy = false;
+    qsName.value = ''; qsName.placeholder = 'Name'; $('qsErr').textContent = ''; $('qsSave').textContent = 'Save to Quick Adds';
+    qsUrl.value = page ? page.url : '';
+    $('qsHost').textContent = page ? host(page.url) : 'Paste a link below';
+    paintQuickFace(); paintQuickList();
+    if (page) peek();
+  }
+  qsName.addEventListener('input', () => { qsNamed = !!qsName.value.trim(); });
+  qsUrl.addEventListener('input', () => { clearTimeout(qsUrl.t); qsUrl.t = setTimeout(peek, 500); });
+  qsUrl.addEventListener('change', peek);
+  $('qsPaste').addEventListener('click', async () => {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (t) { qsUrl.value = t.trim(); peek(); return; }
+    } catch (e) {}
+    qsUrl.focus();   // no clipboard access here: press and hold in the box, then Paste
+  });
+  $('qsSave').addEventListener('click', () => {
+    if (qsBusy) return;
+    const url = qsUrl.value.trim();
+    if (!url) { $('qsErr').textContent = 'Paste a link first.'; qsUrl.focus(); return; }
+    qsBusy = true; $('qsSave').textContent = 'Saving…'; $('qsErr').textContent = '';
+    link.send({ t: 'quick.add', url, name: qsName.value.trim(), icon: qsIcon, title: tvPage && tvPage.url === url ? tvPage.title : '' });
+    setTimeout(() => { if (qsBusy) { qsBusy = false; $('qsSave').textContent = 'Save to Quick Adds'; $('qsErr').textContent = 'The TV box didn’t answer. Try again.'; } }, 8000);
+  });
+  function quickSaved(item) {
+    if (!qsBusy) return;
+    qsBusy = false; buzz(14);
+    qsheet.hidden = true; qsName.blur(); qsUrl.blur();
+    flashTip(`Saved “${item.name}” · find it under Apps`);
+  }
+  function quickErr(err) { qsBusy = false; $('qsSave').textContent = 'Save to Quick Adds'; $('qsErr').textContent = err || 'That didn’t save.'; }
+  function paintQuickList() {
+    const box = $('qsList');
+    box.innerHTML = quick.length ? '<div class="ql-h">Saved</div>' : '';
+    quick.slice().reverse().forEach((q) => {
+      const f = window.QUICK_FACE(q, 38);
+      const row = document.createElement('div');
+      row.className = 'qrow';
+      row.innerHTML = `<i style="background:${f.bg}">${f.html}</i><div class="qr-t"><b>${escH(q.name)}</b><span>${escH(host(q.url))}</span></div><button aria-label="Remove ${escH(q.name)}">✕</button>`;
+      const x = row.querySelector('button');
+      x.addEventListener('click', () => {
+        if (!x.classList.contains('sure')) { x.classList.add('sure'); x.textContent = 'Remove'; setTimeout(() => { x.classList.remove('sure'); x.textContent = '✕'; }, 3000); return; }
+        link.send({ t: 'quick.remove', id: q.id }); buzz(10); row.remove();
+      });
+      box.appendChild(row);
+    });
+  }
+  $('qaddBtn').addEventListener('click', () => { buzz(8); openQuickSheet(tvPage); });
+  ['pointerdown', 'pointerup', 'pointermove'].forEach((ev) => $('qaddBtn').addEventListener(ev, (e) => e.stopPropagation()));
+  $('quickLine').addEventListener('click', () => openQuickSheet(tvPage));
+  $('qsX').addEventListener('click', () => { qsheet.hidden = true; qsName.blur(); qsUrl.blur(); });
+  qsheet.addEventListener('click', (e) => { if (e.target === qsheet) qsheet.hidden = true; });
+  ['pointerdown', 'pointerup'].forEach((ev) => qsheet.addEventListener(ev, (e) => e.stopPropagation()));
+  quickItems([]);
 
   // ---------- Browser bar (Chrome and any other website) ----------
   const addr = $('addr');
@@ -502,6 +660,27 @@
     document.querySelectorAll('.spc').forEach((b) => b.classList.toggle('on', b.dataset.k === k));
     buildTiles(window.SPACE_SERVICES(k));
   }
+  // The phone switches right away and shows the same curtain as the TV, then lifts it with the TV's.
+  let spWait = 0, spHeld = null, spGot = false;
+  function spaceLoading(k) {
+    const sp = window.SPACES.find((x) => x.k === k);
+    if (!sp) return;
+    $('spfxName').textContent = sp.name; $('spfxSub').textContent = sp.sub;
+    $('spfx').classList.add('on');
+    clearTimeout(spWait); spGot = false;
+    spWait = setTimeout(spaceDone, 5000);   // the TV is off or slow: don't keep the phone waiting
+  }
+  function spaceArrived() {               // the TV has the new space; its curtain lifts in a moment
+    if (spGot) return;
+    spGot = true; clearTimeout(spWait);
+    spWait = setTimeout(spaceDone, 550);
+  }
+  function spaceDone() {
+    clearTimeout(spWait); spWait = 0;
+    $('spfx').classList.remove('on');
+    const m = spHeld; spHeld = null;
+    if (m) { apply(m); if (m.theme && m.theme !== tvTheme) paintTheme(m.theme); }
+  }
   function openSpaces(open) {
     spacesEl.classList.toggle('on', open);
     spacesEl.setAttribute('aria-hidden', open ? 'false' : 'true');
@@ -512,7 +691,7 @@
   $('spX').addEventListener('click', () => openSpaces(false));
   document.querySelectorAll('.spc').forEach((b) => b.addEventListener('click', () => {
     const k = b.dataset.k;
-    if (k !== space) { link.send({ t: 'space', name: k }); setSpace(k); buzz(14); }
+    if (k !== space) { link.send({ t: 'space', name: k }); setSpace(k); spaceLoading(k); buzz(14); }
     setTimeout(() => openSpaces(false), 180);
   }));
   ['pointerdown', 'pointerup', 'pointermove'].forEach((ev) => spacesEl.addEventListener(ev, (e) => e.stopPropagation()));

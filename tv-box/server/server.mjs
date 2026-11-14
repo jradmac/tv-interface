@@ -217,7 +217,80 @@ function spaceFromSpeech(text) {
   if (!m) return null;
   return m[1] === 'living room' ? 'living' : m[1].startsWith('game') ? 'games' : 'school';
 }
-const UI_FROM_REMOTE = new Set(['swipe', 'tap', 'back', 'pad', 'click', 'scroll', 'media', 'key', 'text', 'select', 'apps', 'apps.pick']);
+// ---------------------------------------------------------------------------------------
+// Quick Adds: links saved from the phone (a YouTube video, a playlist, any page). Shown as small
+// tiles under the Apps grid; tapping one opens that exact link. Kept on the box in server.json.
+
+const QUICK_ICONS = ['auto', 'play', 'list', 'music', 'star', 'heart', 'film', 'book', 'game', 'moon', 'flame', 'globe'];
+const QUICK_MAX = 40;
+// Which app a link belongs to (same idea as the agent's serviceFor), so its tile can wear that app's mark.
+const QUICK_HOSTS = [['youtube', ['youtube.com', 'youtu.be']], ['netflix', ['netflix.com']], ['spotify', ['spotify.com']],
+  ['applemusic', ['music.apple.com']], ['prime', ['primevideo.com', 'amazon.com']], ['disney', ['disneyplus.com']],
+  ['max', ['max.com', 'hbomax.com']], ['claude', ['claude.ai']], ['learningsuite', ['learningsuite.byu.edu']]];
+function quickService(url) {
+  let u; try { u = new URL(url); } catch { return 'chrome'; }
+  const host = u.hostname.toLowerCase(), hp = host + u.pathname;
+  if (hp.startsWith('docs.google.com/document')) return 'gdocs';
+  if (hp.startsWith('docs.google.com/spreadsheets')) return 'gsheets';
+  for (const [k, hosts] of QUICK_HOSTS) if (hosts.some((h) => host === h || host.endsWith('.' + h))) return k;
+  return 'chrome';
+}
+// "youtu.be/abc", "www.netflix.com/title/1" or a full link -> a full https link, or '' if it isn't one.
+function quickUrl(raw) {
+  let s = String(raw || '').trim();
+  const found = s.match(/https?:\/\/\S+/i);          // a shared message with a link inside it
+  if (found) s = found[0];
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(s) && /^[^\s/]+\.[a-z]{2,}(:\d+)?(\/\S*)?$/i.test(s)) s = 'https://' + s;
+  try {
+    const u = new URL(s);
+    if (!/^https?:$/.test(u.protocol) || !u.hostname.includes('.') || s.length > 2000) return '';
+    return u.href;
+  } catch { return ''; }
+}
+// Any YouTube link (including the TV app's own youtube.com/tv#/watch?v=…) as a normal one:
+// watch?v=ID (with its playlist), or playlist?list=ID. null when it's another kind of YouTube page.
+function ytNormal(url) {
+  let u; try { u = new URL(url); } catch { return null; }
+  if (quickService(url) !== 'youtube') return null;
+  let q = u.searchParams, path = u.pathname;
+  if (path.startsWith('/tv') && u.hash.includes('?')) { const h = u.hash.slice(1); path = h.split('?')[0]; q = new URLSearchParams(h.split('?')[1]); }
+  let v = q.get('v') || '';
+  if (u.hostname === 'youtu.be') v = path.slice(1);
+  const m = path.match(/^\/(?:shorts|live|embed)\/([\w-]{11})/);
+  if (m) v = m[1];
+  const list = q.get('list') || '';
+  if (/^[\w-]{11}$/.test(v)) return 'https://www.youtube.com/watch?v=' + v + (list ? '&list=' + encodeURIComponent(list) : '');
+  if (list) return 'https://www.youtube.com/playlist?list=' + encodeURIComponent(list);
+  return null;
+}
+const GENERIC_TITLES = /^(youtube( on tv)?|youtube tv|netflix|spotify.*|prime video.*|disney\+|max|apple music|claude|google|new tab)$/i;
+async function pageTitle(url) {
+  try {
+    const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36', 'accept-language': 'en-US' }, signal: AbortSignal.timeout(4000) });
+    const html = (await r.text()).slice(0, 3_000_000);   // YouTube puts its <title> past the first 1 MB
+    const t = (html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)/i) || html.match(/<title[^>]*>([^<]+)/i) || [])[1] || '';
+    return t.replace(/&amp;/g, '&').replace(/&#39;|&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+  } catch { return ''; }
+}
+// A good name for a link, so the phone rarely needs typing: the video's title, the page's title, or its site.
+async function quickName(url, hint) {
+  const yt = ytNormal(url);
+  if (yt) {
+    try {
+      const r = await fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent(yt), { signal: AbortSignal.timeout(4000) });
+      if (r.ok) { const j = await r.json(); if (j.title) return String(j.title); }
+    } catch {}
+  }
+  const h = String(hint || '').trim();
+  if (h && !GENERIC_TITLES.test(h)) return h;
+  const t = (await pageTitle(yt || url)).replace(/\s+-\s+YouTube$/, '');
+  if (t && !GENERIC_TITLES.test(t)) return t;
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return 'Link'; }
+}
+const clip = (s, n) => { s = String(s).replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s; };
+state.quick = Array.isArray(state.quick) ? state.quick : [];
+
+const UI_FROM_REMOTE = new Set(['swipe', 'tap', 'back', 'pad', 'click', 'scroll', 'media', 'key', 'text', 'select', 'apps', 'apps.pick', 'quick.view']);
 if (!state.roku) state.roku = {};
 const roku = new Roku(state.roku, {
   save, log,
@@ -305,8 +378,10 @@ const room = {
       if (state.theme) s.send({ t: 'theme', name: state.theme });
       s.send({ t: 'sounds', on: state.sounds !== false });
       s.send({ t: 'space', name: state.space || 'living' });
+      s.send({ t: 'quick', items: state.quick });
     }
     if (s.info.role === 'remote') {
+      s.send({ t: 'quick', items: state.quick });
       s.send({ t: 'sounds', on: state.sounds !== false });
       s.send({ t: 'space', name: state.space || 'living' });
       s.send(roku.status());
@@ -363,6 +438,27 @@ const room = {
         return this.sendTo('remote', { t: 'sounds', on });
       }
       if (msg.t === 'space') return this.setSpace(msg.name);
+      // Quick Adds: save, remove, suggest a name, open.
+      if (msg.t === 'quick.peek') {
+        const url = quickUrl(msg.url);
+        if (!url) return s.send({ t: 'quick.peek', url: '', asked: String(msg.url || ''), error: "That doesn't look like a link." });
+        const norm = ytNormal(url) || url;
+        return s.send({ t: 'quick.peek', url: norm, asked: String(msg.url || ''), k: quickService(norm), name: clip(await quickName(norm, msg.title), 60) });
+      }
+      if (msg.t === 'quick.add') return this.quickAdd(s, msg);
+      if (msg.t === 'quick.remove') {
+        const n = state.quick.length;
+        state.quick = state.quick.filter((q) => q.id !== msg.id);
+        if (state.quick.length !== n) { save(); this.quickChanged(); }
+        return;
+      }
+      if (msg.t === 'quick.open') {
+        const q = state.quick.find((x) => x.id === msg.id);
+        if (!q) return;
+        log('quick add:', q.name);
+        // On Home the TV plays the opening animation, then asks the box to go; otherwise the box goes right away.
+        return tvUp ? this.sendTo('tv', msg) : this.sendTo('box', { t: 'open', k: q.k, url: q.url });
+      }
       // The TV set itself (Roku): power, and which HDMI input the box is on.
       if (msg.t === 'tv.power') return roku.power(typeof msg.on === 'boolean' ? msg.on : undefined);
       if (msg.t === 'tv.setup') return roku.setup({ ip: msg.ip, hdmi: msg.hdmi });
@@ -374,6 +470,10 @@ const room = {
       if (msg.t === 'space') return this.setSpace(msg.name);
       if (msg.t === 'open' || msg.t === 'control') return this.sendTo('box', msg);
       if (msg.t === 'state') {
+        // The box's space is the truth: while the TV is still reloading into a new space, its updates name the
+        // old one, which must not flip the phones back. tvSpace says what the TV itself is showing.
+        msg.tvSpace = msg.space;
+        msg.space = state.space || 'living';
         this.lastState = msg;
         if (THEMES.includes(msg.theme) && msg.theme !== state.theme) { state.theme = msg.theme; save(); } // picked on the TV
         // A search asked for while a service was showing: show it once Home has settled.
@@ -392,6 +492,25 @@ const room = {
       if (msg.t === 'kbd.show') { this.kbd = msg; return this.sendTo('remote', msg); }
       if (msg.t === 'kbd.hide') { this.kbd = null; return this.sendTo('remote', msg); }
     }
+  },
+
+  async quickAdd(s, msg) {
+    const url = quickUrl(msg.url);
+    if (!url) return s.send({ t: 'quick.error', error: "That doesn't look like a link. Try copying it again." });
+    if (state.quick.length >= QUICK_MAX) return s.send({ t: 'quick.error', error: `You can keep up to ${QUICK_MAX} Quick Adds. Remove one first.` });
+    const norm = ytNormal(url) || url;
+    const name = clip(String(msg.name || '').trim() || await quickName(norm, msg.title), 60);
+    const item = { id: rid(6), name, url: norm, k: quickService(norm), icon: QUICK_ICONS.includes(msg.icon) ? msg.icon : 'auto', added: Date.now() };
+    state.quick.push(item);
+    save();
+    log('quick add saved:', item.name, item.url);
+    s.send({ t: 'quick.saved', item });
+    this.quickChanged();
+    this.sendTo('tv', { t: 'toast', text: `Added “${item.name}” to Quick Adds` });
+  },
+  quickChanged() {
+    this.sendTo('tv', { t: 'quick', items: state.quick });
+    this.sendTo('remote', { t: 'quick', items: state.quick });
   },
 
   // Switch the set of app cards on Home, on the TV and every phone.

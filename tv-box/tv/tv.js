@@ -129,6 +129,7 @@
 
   // ---------- Modes ----------
   let mode = 'home', results = [], rsel = 0, cdTimer = 0, pending = null;
+  let quick = [], qtiles = [], qOn = false, qsel = -1;   // Quick Adds (built further down)
   function setMode(m) {
     const prev = mode;
     mode = m;
@@ -146,6 +147,7 @@
   function sendState() {
     const s = S[Math.max(0, mode === 'apps' ? gsel : focus)];
     link.send({ t: 'state', mode, space: SPACE, theme: window.TVTheme.current, focus: { k: s.k, name: s.name },
+      quick: mode === 'apps' && qOn ? { on: true, id: qsel >= 0 && quick[qsel] ? quick[qsel].id : null } : undefined,
       results: mode === 'results' ? results.map((r, i) => ({ ...r, on: i === rsel })) : undefined,
       countdown: mode === 'countdown' ? pending : undefined });
   }
@@ -456,6 +458,8 @@
   function gridMove(v) {
     if (!v) return;
     const [dx, dy] = v;
+    if (qOn) { quickMove(dx, dy); return; }
+    if (dy > 0 && Math.floor(gsel / COLS) === rows - 1) { quickEnter(); return; }   // Down past the last row: Quick Adds
     if (tsel >= 0) {                                   // in the theme row
       if (dy < 0) { tsel = -1; paintSel(); paintThemes(); return; }
       if (dx) { const n = Math.max(0, Math.min(tchips.length - 1, tsel + dx)); if (n !== tsel) { tsel = n; paintThemes(); window.TVSound.tick(dx, 0.8); } }
@@ -489,6 +493,7 @@
   function closeGrid() {
     clearTimeout(gridTimer);
     tsel = -1; paintThemes();
+    if (qOn) quickLeave(true);
     window.TVSound.gridOut();
     gridEl.classList.remove('in');
     // Land the carousel on the chosen app, then send every tile back to its card.
@@ -508,12 +513,143 @@
   }
   function openFromGrid() {
     if (tsel >= 0) { setTheme(tchips[tsel].dataset.k); return; }
+    if (qOn) { if (qsel >= 0 && quick[qsel]) openQuick(quick[qsel], qtiles[qsel]); return; }
     clearTimeout(gridTimer);
     const s = S[gsel];
     focus = gsel; target = gsel; pos = gsel; vel = 0; layout();
     const r = spots[gsel];
     faces[gsel].style.opacity = 0;
     openService(s.k, undefined, { left: r.left, top: r.top, width: r.width, height: r.height });
+  }
+
+  // ---------- Quick Adds: saved links under the grid. Down from the last row slides the apps up. ----------
+  const QT = 150, QGX = 44, QGY = 30, QNAME = 40, QCOLS = 8;
+  const gridBottom = spots.length ? Math.max(...spots.map((p) => p.top)) + T + NAME : 760;
+  const qLabelTop = gridBottom + 78;                   // just peeks in at the bottom of the apps
+  const qTop = qLabelTop + 110;
+  // How far the apps slide up: enough to sit the Quick Adds in the middle of the room (never above y=230).
+  const qShift = () => {
+    const qr = Math.max(1, Math.ceil(quick.length / QCOLS)), h = 110 + qr * (QT + QNAME) + (qr - 1) * QGY;
+    return Math.max(0, qLabelTop - Math.max(230, (1080 - h) / 2 - 20));
+  };
+  const qwrap = document.createElement('div');
+  qwrap.className = 'quick';
+  qwrap.innerHTML = `<div class="q-label" style="top:${qLabelTop}px">Quick Adds<svg class="q-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></div>
+    <div class="q-empty" style="top:${qTop}px">Open a video or a page on the TV, then tap <b>＋ Quick Add</b> on your phone.<br>It shows up here, one tap away.</div>`;
+  gridEl.appendChild(qwrap);
+  function quickSpot(i) {
+    const n = qtiles.length, r = Math.floor(i / QCOLS), c = i % QCOLS;
+    const inRow = Math.min(QCOLS, n - r * QCOLS);
+    const rowW = inRow * QT + (inRow - 1) * QGX;
+    return { left: (1920 - rowW) / 2 + c * (QT + QGX), top: qTop + r * (QT + QNAME + QGY), width: QT, height: QT };
+  }
+  function buildQuick(items) {
+    const keep = qsel >= 0 && quick[qsel] ? quick[qsel].id : null;
+    quick = Array.isArray(items) ? items : [];
+    qtiles.forEach((t) => t.remove());
+    qtiles = quick.map((q, i) => {
+      const f = window.QUICK_FACE(q, QT);
+      const t = document.createElement('div');
+      t.className = 'qtile';
+      t.style.transitionDelay = `${Math.min(i, 10) * 0.03}s`;
+      t.innerHTML = `<div class="qface" style="background:${f.bg}">${f.html}</div><div class="qname">${esc(q.name)}</div>`;
+      qwrap.appendChild(t);
+      return t;
+    });
+    qtiles.forEach((t, i) => { const p = quickSpot(i); t.style.left = p.left + 'px'; t.style.top = p.top + 'px'; });
+    qwrap.classList.toggle('none', !quick.length);
+    if (qOn) gridEl.style.transform = `translateY(${-qShift()}px)`;
+    if (qOn) { const i = quick.findIndex((q) => q.id === keep); qsel = i >= 0 ? i : quick.length ? Math.min(Math.max(qsel, 0), quick.length - 1) : -1; paintQuick(); }
+  }
+  function paintQuick() { qtiles.forEach((t, i) => t.classList.toggle('on', qOn && i === qsel)); }
+  function quickEnter(i) {
+    if (qOn && i == null) return;
+    // Start on the Quick Add under the app that was picked.
+    if (i == null) {
+      const x = spots[gsel] ? spots[gsel].left + T / 2 : 960;
+      i = -1;
+      let bd = 1e9;
+      qtiles.forEach((t, j) => { const p = quickSpot(j); if (j < QCOLS && Math.abs(p.left + QT / 2 - x) < bd) { bd = Math.abs(p.left + QT / 2 - x); i = j; } });
+    }
+    qOn = true; qsel = quick.length ? Math.max(0, Math.min(quick.length - 1, i)) : -1;
+    faces.forEach((f) => { f.classList.remove('on'); f.style.transform = ''; });
+    names.forEach((n) => { n.classList.remove('on'); n.style.transform = ''; });
+    gridEl.classList.add('q-on');
+    gridEl.style.transform = `translateY(${-qShift()}px)`;
+    paintQuick();
+    window.TVSound.tick(1, 0.8);
+    sendState();
+  }
+  function quickLeave(quiet) {
+    if (!qOn) return;
+    // Back up into the apps, on the one above.
+    if (qsel >= 0) {
+      const x = quickSpot(qsel).left + QT / 2;
+      let best = gsel, bd = 1e9;
+      spots.forEach((p, j) => { if (Math.floor(j / COLS) === rows - 1 && Math.abs(p.left + T / 2 - x) < bd) { bd = Math.abs(p.left + T / 2 - x); best = j; } });
+      gsel = best;
+    }
+    qOn = false; qsel = -1;
+    gridEl.classList.remove('q-on');
+    gridEl.style.transform = '';
+    paintQuick();
+    if (!quiet) { paintSel(); window.TVSound.tick(-1, 0.8); sendState(); }
+  }
+  function quickMove(dx, dy) {
+    if (!quick.length) { if (dy < 0) quickLeave(); return; }
+    const r = Math.floor(qsel / QCOLS), qrows = Math.ceil(quick.length / QCOLS);
+    let n = qsel;
+    if (dx) n = qsel + dx;
+    if (dy) {
+      const nr = r + dy;
+      if (nr < 0) { quickLeave(); return; }
+      if (nr >= qrows) return;
+      const x = quickSpot(qsel).left;
+      let bd = 1e9;
+      quick.forEach((_, j) => { if (Math.floor(j / QCOLS) === nr && Math.abs(quickSpot(j).left - x) < bd) { bd = Math.abs(quickSpot(j).left - x); n = j; } });
+    }
+    if (n < 0 || n >= quick.length || n === qsel) return;
+    window.TVSound.tick(n > qsel ? 1 : -1, 0.8);
+    qsel = n;
+    paintQuick();
+    sendState();
+  }
+  // Open a Quick Add: its tile grows to fill the room, then the box opens that exact link.
+  function openQuick(q, tile) {
+    clearTimeout(gridTimer);
+    const f = window.QUICK_FACE(q, 300);
+    const g = window.QUICK_ICONS.find((x) => x.k === q.icon);
+    let from = cardRect, radius = 36;
+    if (tile && mode === 'apps') {
+      const sr = screen.getBoundingClientRect(), k = sr.width / 1920, r = tile.querySelector('.qface').getBoundingClientRect();
+      from = { left: (r.left - sr.left) / k, top: (r.top - sr.top) / k, width: r.width / k, height: r.height / k };
+      radius = 26;
+      tile.classList.add('gone');
+    }
+    window.TVSound.open();
+    const fromGrid = mode === 'apps';
+    setMode('opening');
+    take.className = 'takeover-in';
+    take.style.transition = 'none';
+    take.style.background = f.bg;
+    take.style.color = g ? g.fg : q.k === 'youtube' ? '#0F0F0F' : '#fff';
+    take.innerHTML = `${f.html}<div class="note">${esc(q.name)}</div>`;
+    place(from, radius);
+    take.style.opacity = 1;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const d = reduce ? 0 : 0.6;
+      take.style.transition = `left ${d}s var(--ease), top ${d}s var(--ease), width ${d}s var(--ease), height ${d}s var(--ease), border-radius ${d}s var(--ease)`;
+      place({ left: 0, top: 0, width: 1920, height: 1080 }, 0);
+      setTimeout(() => {
+        if (fromGrid) {
+          gridEl.classList.remove('in'); faces.forEach((x) => (x.style.opacity = 0));
+          gridEl.style.transition = 'none'; quickLeave(true); requestAnimationFrame(() => (gridEl.style.transition = ''));
+          qtiles.forEach((t) => t.classList.remove('gone'));
+        }
+        take.classList.add('full');
+        link.send({ t: 'open', k: q.k || 'chrome', url: q.url });
+      }, d * 1000);
+    }));
   }
 
   // ---------- Spaces ----------
@@ -523,8 +659,8 @@
   function switchSpace(name) {
     if (switching || !window.SPACES.some((x) => x.k === name)) return;
     switching = true;
-    try { localStorage.setItem('tv-space', name); sessionStorage.setItem('tv-space-enter', '1'); } catch (e) {}
     const sp = spaceOf(name), cur = $('spacefx');
+    try { localStorage.setItem('tv-space', name); sessionStorage.setItem('tv-space-enter', JSON.stringify({ name: sp.name, sub: sp.sub })); } catch (e) {}
     $('sfxName').textContent = sp.name; $('sfxSub').textContent = sp.sub;
     window.TVSound.gridOut();
     screen.classList.add('sp-out');                 // the row sinks and fades
@@ -534,11 +670,12 @@
   // Arriving in a space: the curtain is up with its name; it lifts and the row rises in.
   (() => {
     let enter = false;
-    try { enter = sessionStorage.getItem('tv-space-enter') === '1'; sessionStorage.removeItem('tv-space-enter'); } catch (e) {}
+    try { enter = !!sessionStorage.getItem('tv-space-enter'); sessionStorage.removeItem('tv-space-enter'); } catch (e) {}
     if (!enter) return;
     const cur = $('spacefx'), sp = spaceOf(SPACE);
     $('sfxName').textContent = sp.name; $('sfxSub').textContent = sp.sub;
     cur.classList.add('on', 'still'); screen.classList.add('sp-in');
+    document.documentElement.classList.remove('sp-enter');   // the classes above now hold the curtain
     requestAnimationFrame(() => requestAnimationFrame(() => {
       cur.classList.remove('still');
       setTimeout(() => { cur.classList.remove('on'); screen.classList.remove('sp-in'); }, reduce ? 0 : 650);
@@ -557,11 +694,25 @@
       case 'theme':
         setTheme(m.name);
         break;
+      case 'quick': buildQuick(m.items); break;
+      case 'quick.view':                                  // the phone scrolled its Apps grid to Quick Adds (or back)
+        if (mode === 'apps') m.on ? quickEnter() : quickLeave();
+        break;
+      case 'quick.open': {
+        const i = quick.findIndex((q) => q.id === m.id);
+        if (i < 0) break;
+        if (mode === 'apps') {
+          if (!qOn) quickEnter(i); else { qsel = i; paintQuick(); }
+          clearTimeout(gridTimer); gridTimer = setTimeout(() => openQuick(quick[i], qtiles[i]), reduce ? 0 : 320);
+        } else if (mode === 'home' || mode === 'results' || mode === 'voice') openQuick(quick[i]);
+        break;
+      }
       case 'apps.pick': {
         // The phone tapped a tile: move the highlight there, then open it from the grid.
         const i = S.findIndex((s) => s.k === m.k);
         if (i < 0) break;
         if (mode === 'apps') {
+          if (qOn) quickLeave(true);
           tsel = -1; paintThemes(); gsel = i; paintSel();
           clearTimeout(gridTimer); gridTimer = setTimeout(openFromGrid, 140);
         } else if (mode === 'home' || mode === 'results' || mode === 'voice') { jumpTo(m.k); openService(m.k); }
@@ -570,7 +721,7 @@
       case 'key':
         if (mode === 'apps') {
           if (m.key === 'Enter') openFromGrid();
-          else if (m.key === 'Escape') closeGrid();
+          else if (m.key === 'Escape') qOn ? quickLeave() : closeGrid();
           else gridMove({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[m.key]);
         } else if (mode === 'home') {
           if (m.key === 'ArrowLeft') step(-1); else if (m.key === 'ArrowRight') step(1);
@@ -599,7 +750,7 @@
         else if (mode === 'countdown') cancelCountdown();
         break;
       case 'back':
-        if (mode === 'apps') closeGrid();
+        if (mode === 'apps') qOn ? quickLeave() : closeGrid();
         else if (mode === 'countdown') cancelCountdown();
         else if (mode === 'results' || mode === 'voice') setMode('home');
         break;

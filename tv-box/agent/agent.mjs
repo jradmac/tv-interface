@@ -50,6 +50,23 @@ const SERVICES = {
   chrome: { name: 'Chrome', home: 'https://www.google.com', hosts: [], browser: true },
 };
 
+// youtube.com/watch?v=…, youtu.be/…, /shorts/…, or a playlist -> the same thing in YouTube's TV app.
+// A playlist link alone starts at its first video. null for other YouTube pages (channels and such).
+async function youtubeTvUrl(url) {
+  const u = new URL(url);
+  if (u.pathname.startsWith('/tv')) return url;
+  let v = u.hostname === 'youtu.be' ? u.pathname.slice(1, 12) : u.pathname === '/watch' ? u.searchParams.get('v') || '' : '';
+  const m = u.pathname.match(/^\/(?:shorts|live|embed)\/([\w-]{11})/);
+  if (m) v = m[1];
+  const list = u.searchParams.get('list') || '';
+  if (!v && list) {
+    const html = await (await fetch('https://www.youtube.com/playlist?list=' + encodeURIComponent(list), { headers: { 'accept-language': 'en-US' }, signal: AbortSignal.timeout(6000) })).text();
+    v = (html.match(/"videoId":"([\w-]{11})"/) || [])[1] || '';
+  }
+  if (!/^[\w-]{11}$/.test(v)) return null;
+  return 'https://www.youtube.com/tv#/watch?v=' + v + (list ? '&list=' + encodeURIComponent(list) : '');
+}
+
 function serviceFor(url) {
   let host;
   let hp;
@@ -447,7 +464,9 @@ class Agent {
       log('page:', url.replace(/[?#].*$/, ''));
       if (this.kbd) { this.kbd = null; this.sendRelay({ t: 'kbd.hide' }); }
     }
-    if (changed || !sameDoc) this.sendState();
+    // Within-page moves count too (YouTube's TV app changes only the #…), so the phone always knows the
+    // exact page on screen and can save it as a Quick Add.
+    if (changed || !sameDoc || url !== this.sentUrl) this.sendState();
   }
 
   onKbd(payload) {
@@ -468,6 +487,7 @@ class Agent {
     const s = SERVICES[k];
     const h = await this.cdp.send('Page.getNavigationHistory').catch(() => null);
     const cur = h && h.entries[h.currentIndex];
+    this.sentUrl = this.url;
     this.sendRelay({ t: 'state', mode: 'service', k, name: s.name, music: !!s.music, browser: !!s.browser, term: !!s.term, game: !!s.game,
       url: this.url, title: (cur && cur.title) || '', canBack: !!(h && h.currentIndex > 0), canForward: !!(h && h.currentIndex < h.entries.length - 1) });
   }
@@ -584,7 +604,7 @@ class Agent {
       case 'welcome': case 'pong': case 'presence': case 'cancel': return;
       case 'agent.key': this.apiKey = String(m.key || ''); return;
       case 'agent.run': return this.driver.start(m.task, this.apiKey);
-      case 'open': return this.open(m.k, m.query);
+      case 'open': return m.url ? this.openUrl(m.url) : this.open(m.k, m.query);
       case 'home': return this.goHome();
       case 'apps': return this.goHome(true); // Home, opening straight into the Apps grid
       case 'apps.pick': return this.open(m.k); // picked on the phone while a service was showing
@@ -691,6 +711,23 @@ class Agent {
     const helper = HELPERS[k];
     if (!helper) { await this.navigate(s.home, s.ua); return false; }
     try { return !!(await helper.call(this, query, live)); } catch (e) { log(`${k} helper failed:`, e.message); return false; }
+  }
+
+  // A Quick Add: open that exact link. YouTube links open in YouTube's TV app (the one the remote drives),
+  // straight into the video or playlist.
+  async openUrl(url) {
+    if (!/^https?:\/\//i.test(url)) return this.toast("That link can't be opened here.");
+    const job = ++this.job;
+    const k = serviceFor(url);
+    this.openedK = k || 'chrome';
+    log('open link', url.slice(0, 100));
+    if (k === 'youtube') {
+      const tv = await youtubeTvUrl(url).catch(() => null);
+      if (job !== this.job) return;
+      if (tv) return this.navigate(tv, UA_TV);
+    }
+    const s = k && SERVICES[k];
+    return this.navigate(url, s && s.ua && k !== 'youtube' ? s.ua : undefined);
   }
 
   // Open a service, and if there's a query, find it and start it.

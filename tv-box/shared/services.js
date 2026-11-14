@@ -97,4 +97,36 @@
     return list.length ? list : [{ ...PLACEHOLDER, name: (window.SPACES.find((x) => x.k === space) || {}).name || 'Games' }];
   };
   window.SERVICE_MARK = mark;
+
+  // ---------- Quick Adds: small tiles for saved links ----------
+  // Each item is { id, name, url, k (the app the link belongs to, or 'chrome'), icon }. icon 'auto' wears the
+  // app's own mark (YouTube's play button, Netflix's N…); the others are simple drawn glyphs on a soft color.
+  const QI = [
+    { k: 'play', name: 'Play', bg: '#FDE8E4', fg: '#C8442F', d: '<path d="M8.5 5.5v13l10-6.5z"/>' },
+    { k: 'list', name: 'Playlist', bg: '#E7EEFB', fg: '#3C63B8', d: '<path d="M4 7h11M4 12h11M4 17h7"/><path d="M16.5 14.5v5l4.2-2.5z"/>' },
+    { k: 'music', name: 'Music', bg: '#F3E6F7', fg: '#8A3FA6', d: '<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>' },
+    { k: 'star', name: 'Star', bg: '#FCF1D6', fg: '#A87304', d: '<path d="M12 3.5l2.6 5.3 5.9.9-4.25 4.1 1 5.8L12 16.9 6.75 19.6l1-5.8L3.5 9.7l5.9-.9z"/>' },
+    { k: 'heart', name: 'Heart', bg: '#FBE4EA', fg: '#C23A5E', d: '<path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z"/>' },
+    { k: 'film', name: 'Movie', bg: '#ECE8F8', fg: '#5A4AB0', d: '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9.5h17M3.5 14.5h17M8.5 5v14M15.5 5v14"/>' },
+    { k: 'book', name: 'Learn', bg: '#E3F0FA', fg: '#1F5F96', d: STROKE.learningsuite },
+    { k: 'game', name: 'Game', bg: '#E8F3EC', fg: '#2F7A4C', d: STROKE.games },
+    { k: 'moon', name: 'Wind down', bg: '#E6E9F2', fg: '#3B4566', d: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>' },
+    { k: 'flame', name: 'Hype', bg: '#FDEBDD', fg: '#C8571B', d: '<path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.6 3-5.6 3.8-9.3 2.4 1.3 3.7 3.5 3.7 5.6 1-.6 1.6-1.6 1.8-2.8 2 1.6 3.7 4 3.7 6.5 0 3.6-2.6 6.2-6.5 6.2z"/>' },
+    { k: 'globe', name: 'Web', bg: '#EEF0EC', fg: '#4A5A50', d: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.3 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.3-3.5-8.5s1.1-6.1 3.5-8.5z"/>' },
+  ];
+  const glyph = (g, h) => `<svg class="mk" width="${h}" height="${h}" viewBox="0 0 24 24" fill="none" stroke="${g.fg}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${g.d}</svg>`;
+  // The app's own mark on its own background, sized for a tile h px tall.
+  const appMark = (s, h) => s.k === 'disney'
+    ? `<span class="mk-word" style="font-size:${Math.round(h * 0.42)}px;color:#fff;letter-spacing:-.03em">Disney<span style="color:#7FD6F5">+</span></span>`
+    : mark(s.k, s.k === 'youtube' ? '#FF0033' : ['netflix', 'prime', 'spotify', 'gdocs', 'gsheets'].includes(s.k) ? s.accent : '#fff', Math.round(h * (s.k === 'prime' ? 0.7 : 0.5)));
+  window.QUICK_ICONS = QI;
+  // { bg, html } for a Quick Add's tile face, h px tall.
+  window.QUICK_FACE = (item, h) => {
+    const g = QI.find((x) => x.k === item.icon);
+    if (g) return { bg: g.bg, html: glyph(g, Math.round(h * 0.46)) };
+    const s = item.k && item.k !== 'chrome' && window.SERVICES.find((x) => x.k === item.k);
+    if (s && !s.art) return { bg: s.k === 'youtube' ? '#fff' : s.bg, html: appMark(s, h) };
+    const w = QI[QI.length - 1];
+    return { bg: w.bg, html: glyph(w, Math.round(h * 0.46)) };
+  };
 })();
