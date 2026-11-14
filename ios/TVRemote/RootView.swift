@@ -311,11 +311,22 @@ struct MediaStrip: View {
     let music: Bool
     var body: some View {
         HStack(spacing: 10) {
-            if !music { btn("−10s", "back10") }
-            btn("Play / Pause", "playpause", grow: 2)
-            if music { btn("Next", "next") } else { btn("+10s", "fwd10") }
-            btn("Vol −", "voldown")
-            btn("Vol +", "volup")
+            btn("Play / Pause", "playpause")
+            // Save what the TV is showing (a video, a playlist, any page) as a Quick Add.
+            Button {
+                Haptics.tap()
+                link.quickDraft = link.savablePage ?? QuickDraft()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(Color.ink)
+                    .frame(width: 56, height: 56)
+                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.white))
+                    .rest()
+            }
+            .buttonStyle(PressStyle(scale: 0.94))
+            .accessibilityLabel("Quick Add")
+            .accessibilityHint("Save what's on the TV as a tile under Apps")
         }
         .frame(height: 56)
     }

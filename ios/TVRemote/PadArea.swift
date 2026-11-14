@@ -35,25 +35,8 @@ struct PadArea: View {
                 } else if st.mode == "countdown" {
                     CountdownView(say: st.countdownSay ?? "Playing", id: st.countdownID)
                 } else if st.mode == "service" {
-                    VStack(spacing: 18) {
-                        ServiceLabel(name: st.k == "chrome" ? (st.title.isEmpty ? "Chrome" : st.title) : Services.by(st.k).name)
-                            .allowsHitTesting(false)
-                        // Save what the TV is showing (a video, a playlist, any page) as a Quick Add.
-                        if let page = link.savablePage {
-                            Button {
-                                Haptics.tap()
-                                link.quickDraft = page
-                            } label: {
-                                Label("Quick Add", systemImage: "plus")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(Color.ink)
-                                    .padding(.vertical, 10).padding(.horizontal, 16)
-                                    .background(Capsule().fill(Color.room))
-                            }
-                            .buttonStyle(PressStyle())
-                            .transition(.opacity)
-                        }
-                    }
+                    ServiceLabel(name: st.k == "chrome" ? (st.title.isEmpty ? "Chrome" : st.title) : Services.by(st.k).name)
+                        .allowsHitTesting(false)
                 } else {
                     OnScreen()
                         .allowsHitTesting(false)
