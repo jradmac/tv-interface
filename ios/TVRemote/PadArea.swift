@@ -598,7 +598,7 @@ struct QuickFace: View {
     }
 }
 
-/// The TV's look: Light, Dark, Nature, Tech, Rain, Jungle, Aurora. The TV (and box) remember the choice.
+/// The TV's look: Light, Dark, Nature, Tech, Rain, Snow, Jungle, Aurora. The TV (and box) remember the choice.
 struct ThemeRow: View {
     @EnvironmentObject var link: TVLink
     var compact = false
@@ -615,11 +615,12 @@ struct ThemeRow: View {
         Choice(k: "nature", name: "Nature", swatch: [Color(hex: 0x9CC3D9), Color(hex: 0xE7C9A0), Color(hex: 0x4E7A5A), Color(hex: 0x22402F)]),
         Choice(k: "tech", name: "Tech", swatch: [Color(hex: 0x3B7BFF), Color(hex: 0x0D1424), Color(hex: 0x06080D)]),
         Choice(k: "rain", name: "Rain", swatch: [Color(hex: 0x3A4C5E), Color(hex: 0x18222C), Color(hex: 0x0A0F15)]),
+        Choice(k: "snow", name: "Snow", swatch: [Color(hex: 0x2C3E5E), Color(hex: 0x16233A), Color(hex: 0xDCE8F5), Color(hex: 0x9FB6D0)]),
         Choice(k: "jungle", name: "Jungle", swatch: [Color(hex: 0xBFE8A8), Color(hex: 0x2F7A4A), Color(hex: 0x12301F), Color(hex: 0x06110A)]),
         Choice(k: "aurora", name: "Aurora", swatch: [Color(hex: 0x7A5AE0), Color(hex: 0x2BD9A8), Color(hex: 0x0B1C24), Color(hex: 0x050B12)]),
     ]
 
-    /// Seven themes don't fit on one line of a phone, so they sit on two.
+    /// Eight themes don't fit on one line of a phone, so they sit on two rows of four.
     private static let rows: [[Choice]] = [Array(themes.prefix(4)), Array(themes.dropFirst(4))]
 
     var body: some View {
