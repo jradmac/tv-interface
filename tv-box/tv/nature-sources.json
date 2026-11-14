@@ -1,0 +1,17 @@
+{
+  "note": "Nature theme photos. The installer downloads these on the box (1920px wide, ~300 KB each), skips any that fail, and writes /themes/nature/list.json = [{src, credit}]. All are under the Unsplash License (free to use, no permission needed; credit is a courtesy).",
+  "photos": [
+    { "url": "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1920&q=78&fm=jpg&fit=crop", "credit": "Unsplash" },
+    { "url": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1920&q=78&fm=jpg&fit=crop", "credit": "Unsplash" },
+    { "url": "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1920&q=78&fm=jpg&fit=crop", "credit": "Unsplash" },
+    { "url": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=78&fm=jpg&fit=crop", "credit": "Unsplash" },
+    { "url": "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=1920&q=78&fm=jpg&fit=crop", "credit": "Unsplash" },
+    { "url": "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1920&q=78&fm=jpg&fit=crop", "credit": "Unsplash" },
+    { "url": "https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?w=1920&q=78&fm=jpg&fit=crop", "credit": "Unsplash" },
+    { "url": "https://images.unsplash.com/photo-1433086966358-54859d0ed716?w=1920&q=78&fm=jpg&fit=crop", "credit": "Unsplash" },
+    { "url": "https://images.unsplash.com/photo-1426604966848-d7adac402bff?w=1920&q=78&fm=jpg&fit=crop", "credit": "Unsplash" },
+    { "url": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1920&q=78&fm=jpg&fit=crop", "credit": "Unsplash" },
+    { "url": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1920&q=78&fm=jpg&fit=crop", "credit": "Unsplash" },
+    { "url": "https://images.unsplash.com/photo-1475924156734-496f6cac6ec1?w=1920&q=78&fm=jpg&fit=crop", "credit": "Unsplash" }
+  ]
+}

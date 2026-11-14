@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TV Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/tokens.css">
+<link rel="stylesheet" href="tv.css">
+</head>
+<body>
+<!-- Everything is laid out at 1920×1080 and scaled to the screen. -->
+<div id="screen" class="screen">
+  <div class="room"></div>
+
+  <header class="top">
+    <div class="clock" id="clock">8:42</div>
+    <div class="status" id="status"><span class="dot"></span><span id="statusText">No remote</span></div>
+  </header>
+
+  <main class="stage" id="stage" aria-live="polite"></main>
+
+  <section class="caption" id="caption">
+    <div class="name" id="capName"></div>
+    <div class="sub">Swipe on your phone to browse · Tap to open</div>
+  </section>
+  <nav class="pager" id="pager"></nav>
+  <div class="hint" id="hint"><span class="pill">Hold mic</span> to ask for anything</div>
+  <div class="hint hint-l" id="hintApps"><span class="pill"><svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>Apps</span> to see them all</div>
+
+  <!-- All apps: the carousel's cards fly into a grid of square tiles. -->
+  <section class="grid" id="grid">
+    <div class="grid-label">All apps</div>
+  </section>
+
+  <!-- Voice: your words take the center. -->
+  <section class="veil" id="veil"></section>
+  <section class="listen" id="listen">
+    <div class="said" id="said"></div>
+    <div class="wave" id="wave"></div>
+    <div class="label">Listening</div>
+  </section>
+
+  <!-- Results: answers as cards. -->
+  <section class="results" id="results">
+    <div class="q" id="resQ"></div>
+    <div class="rrow" id="rrow"></div>
+  </section>
+
+  <!-- One clear command: a short countdown you can cancel from the phone. -->
+  <section class="countdown" id="countdown">
+    <div class="cd-card" id="cdCard"></div>
+    <div class="cd-line"><svg class="ring" viewBox="0 0 44 44"><circle cx="22" cy="22" r="19"/><circle id="ringArc" cx="22" cy="22" r="19"/></svg><span id="cdText"></span></div>
+    <div class="cd-hint">Tap Cancel on your phone to stop</div>
+  </section>
+
+  <!-- Opening a service: the card grows to fill the room, then the service takes over. -->
+  <div class="takeover" id="takeover"><div class="takeover-in" id="takeoverIn"></div></div>
+
+  <!-- First run: pair a phone. -->
+  <section class="pair" id="pair">
+    <div class="pair-card" id="pairCard">
+      <div class="pair-front">
+        <div class="qr" id="qr"></div>
+        <div class="pair-text">
+          <div class="pair-title">Use your phone as the remote</div>
+          <div class="pair-sub">Scan with your phone's camera, or go to <b id="pairUrl">tv.home/remote</b> and enter</div>
+          <div class="code" id="code">···</div>
+        </div>
+      </div>
+      <div class="pair-back">
+        <div class="check">✓</div>
+        <div class="pair-title">Connected</div>
+        <div class="pair-sub" id="pairWho">Jared's phone</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- No phone connected for a while: a quiet way to pair again, without taking over the screen. -->
+  <aside class="phint" id="phint" aria-hidden="true">
+    <div class="phint-qr" id="phintQr"></div>
+    <div class="phint-text">
+      <div class="phint-code" id="phintCode"></div>
+      <div class="phint-sub">Pair a phone · <b>tv.local</b></div>
+    </div>
+  </aside>
+
+  <!-- Claude is doing something for you: one quiet strip, live steps, stop from the phone. -->
+  <aside class="agent" id="agent" aria-live="polite">
+    <span class="ag-mark" id="agMark"></span>
+    <span class="ag-text"><span class="ag-who">Claude</span><span id="agText"></span></span>
+    <span class="ag-stop" id="agStop">Stop on your phone</span>
+  </aside>
+
+  <!-- Switching spaces: the new space's name, between the old row and the new one. -->
+  <section class="spacefx" id="spacefx" aria-live="polite"><div class="sfx-name" id="sfxName"></div><div class="sfx-sub" id="sfxSub"></div></section>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script src="../shared/qrcode.js"></script>
+<script src="../shared/services.js"></script>
+<script src="../shared/link.js"></script>
+<script src="../shared/stub.js"></script>
+<script src="themes.js"></script>
+<script src="sound.js"></script>
+<script src="ambience.js"></script>
+<script src="tv.js"></script>
+</body>
+</html>

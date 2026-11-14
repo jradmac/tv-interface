@@ -1,0 +1,9 @@
+/* One warm light room, one ink, one soft lift. Shared by the TV and the remote. */
+:root{
+  --room:#F3F1EC; --room-hi:#FBFAF7; --card:#FFFFFF; --ink:#1C1B19; --ink2:#5E5B55; --mute:#9A968E; --line:#E4E0D8; --ok:#3C8B5A;
+  --lift:0 1px 2px rgba(40,30,20,.05), 0 12px 24px -8px rgba(40,30,20,.10), 0 48px 96px -24px rgba(40,30,20,.28);
+  --rest:0 1px 2px rgba(40,30,20,.04), 0 16px 40px -16px rgba(40,30,20,.14);
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--room);color:var(--ink);font-family:Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}

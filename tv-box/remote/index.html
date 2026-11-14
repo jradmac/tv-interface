@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F3F1EC">
+<meta name="apple-mobile-web-app-title" content="TV Remote">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<title>TV Remote</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/tokens.css">
+<style>
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  body{background:var(--room)}
+  .app{height:100%;display:flex;flex-direction:column;gap:18px;padding:calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 20px)}
+  .top{display:flex;justify-content:space-between;align-items:center;font-size:15px;color:var(--mute)}
+  .top b{color:var(--ink);font-weight:500;font-size:17px}
+  .st{display:flex;align-items:center;gap:7px}
+  .st i{width:8px;height:8px;border-radius:50%;background:var(--mute);transition:background .3s}
+  .st.on i{background:var(--ok)}
+
+  /* Media strip: only inside a service. */
+  .media{display:flex;justify-content:space-between;gap:10px;height:0;opacity:0;overflow:hidden;transition:height .35s var(--ease),opacity .3s}
+  .app.service .media{height:56px;opacity:1}
+  /* Chrome and any other website: a browser bar instead of play controls. */
+  .app.service.web .media{height:0;opacity:0}
+  .bbar{display:flex;gap:8px;align-items:center;height:0;opacity:0;overflow:hidden;transition:height .35s var(--ease),opacity .3s;margin-top:-18px}
+  .app.service.web .bbar{height:52px;opacity:1;margin-top:0}
+  .app.service.web .media{margin-top:-18px}
+  .bb{flex:none;width:44px;height:44px;border:0;border-radius:50%;background:#fff;box-shadow:var(--rest);display:flex;align-items:center;justify-content:center}
+  .bb:active{transform:scale(.94)}
+  .addr{flex:1;min-width:0;margin:0}
+  .addr input{width:100%;height:44px;border:0;border-radius:999px;background:#fff;box-shadow:var(--rest);padding:0 16px;font:500 15px Inter,system-ui;color:var(--ink);
+              outline:none;-webkit-appearance:none;appearance:none;-webkit-user-select:text;user-select:text;text-overflow:ellipsis}
+  .addr input::placeholder{color:var(--mute)}
+  .addr input:focus{box-shadow:var(--rest),0 0 0 2px var(--ink)}
+  .addr input::-webkit-search-cancel-button{display:none}
+  .mbtn{flex:1;border:0;border-radius:18px;background:#fff;box-shadow:var(--rest);font:500 15px Inter,system-ui;color:var(--ink);display:flex;align-items:center;justify-content:center;gap:6px}
+  .mbtn:active{transform:scale(.96)}
+
+  .pad{flex:1;position:relative;border-radius:32px;background:#fff;box-shadow:var(--rest);touch-action:none;overflow:hidden;
+       display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;text-align:center;padding:24px}
+  .now{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+  .svc{font-size:26px;font-weight:600;letter-spacing:-.03em;transition:opacity .2s, transform .3s var(--ease)}
+  .svc.swap{opacity:0;transform:translateY(6px)}
+  .logo{height:64px;display:flex;align-items:center;justify-content:center;transition:opacity .2s}
+  .logo.swap{opacity:0}
+  .pad .hint{position:absolute;left:0;right:0;bottom:22px;font-size:13px;color:var(--mute)}
+  .touch{position:absolute;width:72px;height:72px;margin:-36px 0 0 -36px;border-radius:50%;background:rgba(28,27,25,.07);
+         pointer-events:none;opacity:0;transform:scale(.6);transition:opacity .2s, transform .25s var(--ease)}
+  .touch.on{opacity:1;transform:scale(1)}
+  .said{font-size:26px;line-height:1.3;font-weight:500;letter-spacing:-.02em;padding:0 8px}
+  .said .soft{color:var(--mute)}
+  .cancel{border:0;border-radius:999px;background:var(--ink);color:#fff;font:600 20px Inter,system-ui;padding:18px 44px}
+  .ring{width:40px;height:40px;transform:rotate(-90deg)}
+  .ring circle{fill:none;stroke:var(--line);stroke-width:4}
+  .ring circle+circle{stroke:var(--ink);stroke-dasharray:107;stroke-dashoffset:0}
+  .code{width:220px;text-align:center;font:500 30px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;
+        border:0;border-bottom:2px solid var(--line);background:transparent;padding:10px 0;color:var(--ink);outline:none;-webkit-user-select:text;user-select:text}
+  .code:focus{border-color:var(--ink)}
+  .err{font-size:14px;color:#B3261E;min-height:18px}
+  .view{display:none;flex-direction:column;align-items:center;gap:12px}
+  .view.on{display:flex}
+
+  .row{display:flex;justify-content:space-between;align-items:center;padding:0 6px}
+  .btn{width:60px;height:60px;border-radius:50%;border:0;background:#fff;box-shadow:var(--rest);display:flex;align-items:center;justify-content:center}
+  .btn:active{transform:scale(.94)}
+  .mic{width:92px;height:92px;border-radius:50%;border:0;background:var(--ink);display:flex;align-items:center;justify-content:center;
+       box-shadow:0 18px 36px -12px rgba(28,27,25,.5);transition:transform .25s var(--ease);touch-action:none;position:relative}
+  .mic.on{transform:scale(1.12)}
+  /* While Claude works the mic shows a Stop square. */
+  .mic.stop svg{display:none}
+  .mic.stop::before{content:"";width:26px;height:26px;border-radius:6px;background:#fff}
+  .abar{display:none !important}
+  .mic.on::after{content:"";position:absolute;inset:-10px;border-radius:50%;border:2px solid var(--ink);animation:pulse 1.2s ease-out infinite}
+  @keyframes pulse{from{opacity:.5;transform:scale(.9)}to{opacity:0;transform:scale(1.25)}}
+  .tip{text-align:center;font-size:13px;color:var(--mute);min-height:16px}
+  svg{display:block}
+  .tr{display:flex;align-items:center;gap:12px}
+  .more{border:0;background:#fff;box-shadow:var(--rest);border-radius:999px;height:32px;padding:0 12px;font:600 13px Inter,system-ui;color:var(--ink);letter-spacing:.1em}
+  .top b{white-space:nowrap}
+  @media (max-width:400px){.tr{gap:8px}.top .st{font-size:13px}}
+  /* Tidy header: nothing wraps or gets cut off. Status is just the dot (the word is for screen readers). */
+  .top{gap:12px}
+  .top b{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .tr{flex:none;gap:8px}
+  .more{white-space:nowrap;flex:none}
+  .top .st{order:-1;padding:0 4px}
+  .top .st i{width:10px;height:10px}
+  .top .st #stText{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .apps{display:flex;align-items:center;gap:6px;letter-spacing:0;font-weight:500}
+  .apps svg{fill:var(--ink)}
+  .apps.on{background:var(--ink);color:#fff}.apps.on svg{fill:#fff}
+  /* All apps: the phone mirrors the TV's grid. Tiles spring in; the picked one launches. */
+  .agrid{position:absolute;inset:0;z-index:3;background:#fff;border-radius:32px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;
+         padding:20px 16px;visibility:hidden;pointer-events:none;opacity:0;transition:opacity .25s var(--ease), visibility 0s .35s}
+  .agrid.on{visibility:visible;pointer-events:auto;opacity:1;transition:opacity .2s var(--ease)}
+  .agrid .ahint{font-size:13px;color:var(--mute)}
+  .atiles{display:flex;flex-wrap:wrap;justify-content:center;gap:18px 12px;width:100%;max-width:330px}
+  .at{width:calc((100% - (var(--cols, 4) - 1) * 12px) / var(--cols, 4));display:flex;flex-direction:column;align-items:center;gap:8px;border:0;background:none;padding:0;font:500 12px Inter,system-ui;color:var(--mute);
+      opacity:0;transform:scale(.55) translateY(14px);transition:transform .5s cubic-bezier(.2,1.3,.35,1), opacity .25s, color .2s}
+  .at i{width:100%;aspect-ratio:1;border-radius:18px;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:var(--rest);
+        transition:transform .35s var(--ease), box-shadow .35s}
+  .at i svg{width:52%;height:52%}
+  .at i .dw{font:600 11px Inter,system-ui;letter-spacing:-.03em;color:#fff}
+  .agrid.in .at{opacity:1;transform:none}
+  .at.on{color:var(--ink)}
+  .at.on i{transform:translateY(-3px) scale(1.07);box-shadow:var(--lift),0 0 0 3px #fff,0 0 0 5px var(--ink)}
+  .at:active i{transform:scale(.94)}
+  .agrid.out .at{opacity:0;transform:scale(.6) translateY(10px);transition-duration:.28s,.2s}
+  .agrid.launch .at{opacity:0;transform:scale(.8)}
+  .agrid.launch .at.pick{opacity:1;transform:scale(1.5);transition:transform .45s cubic-bezier(.2,1.2,.35,1)}
+  .agrid.launch .now,.agrid.launch .ahint{opacity:0}
+  @media (prefers-reduced-motion: reduce){.at,.agrid{transition-duration:.01ms !important}}
+  /* Claude is on it: a strip at the top of the pad, with Stop. */
+  .abar{position:absolute;left:12px;right:12px;top:12px;z-index:4;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 10px;border-radius:999px;background:var(--room);
+        opacity:0;transform:translateY(-12px) scale(.97);pointer-events:none;transition:opacity .3s var(--ease),transform .5s cubic-bezier(.2,1.25,.35,1)}
+  .abar.on{opacity:1;transform:none;pointer-events:auto}
+  .ab-mark{flex:none;width:30px;height:30px;border-radius:50%;background:#FBEDE6;display:flex;align-items:center;justify-content:center;font:700 14px Inter,system-ui;color:#fff}
+  .ab-mark svg{width:18px;height:18px;animation:abspin 2.4s linear infinite}
+  @keyframes abspin{to{transform:rotate(360deg)}}
+  .abar.done .ab-mark,.abar.stopped .ab-mark{background:var(--ink)}.abar.fail .ab-mark{background:#B3261E}
+  .abar.done .ab-mark svg,.abar.fail .ab-mark svg,.abar.stopped .ab-mark svg{display:none}
+  .abar.done .ab-mark::after{content:"✓"}.abar.fail .ab-mark::after{content:"!"}
+  .abar.stopped .ab-mark::after{content:"";width:9px;height:9px;border-radius:2px;background:#fff}
+  .ab-text{flex:1;min-width:0;font-size:14px;line-height:1.3;color:var(--ink);text-align:left;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .ab-text b{font-weight:600}
+  .ab-btn{flex:none;border:0;border-radius:999px;background:var(--ink);color:#fff;font:600 14px Inter,system-ui;padding:9px 16px}
+  .abar.done .ab-btn,.abar.stopped .ab-btn{display:none}
+  @media (prefers-reduced-motion: reduce){.ab-mark svg{animation:none}}
+  /* Claude key sheet */
+  .kfield{display:flex;gap:8px}
+  .kfield input{flex:1;min-width:0;height:48px;border:0;border-radius:14px;background:#fff;padding:0 14px;font:500 15px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);
+                outline:none;-webkit-user-select:text;user-select:text}
+  .kfield input:focus{box-shadow:0 0 0 2px var(--ink)}
+  .kfield button{flex:none;border:0;border-radius:14px;background:#fff;font:600 14px Inter,system-ui;color:var(--ink);padding:0 14px}
+  .kstat{font-size:14px;color:var(--ink2);display:flex;align-items:center;gap:8px}
+  .kstat i{width:8px;height:8px;border-radius:50%;background:var(--mute)}.kstat.on i{background:var(--ok)}
+  .ksub{font-size:14px;line-height:1.5;color:var(--ink2)}
+  .ksub a{color:var(--ink);font-weight:600}
+  .linkbtn{border:0;background:none;font:500 14px Inter,system-ui;color:#B3261E;padding:4px 0;align-self:center}
+  /* Add to Home Screen */
+  .a2-head{display:flex;align-items:center;gap:14px}
+  .a2-head img{width:60px;height:60px;border-radius:14px;box-shadow:var(--rest);flex:none}
+  .a2-head b{display:block;font-size:17px;font-weight:600}
+  .a2-head span{font-size:14px;color:var(--ink2)}
+  .a2-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;counter-reset:a2}
+  .a2-steps li{display:flex;align-items:center;gap:12px;background:#fff;border-radius:14px;padding:13px 14px;font-size:15px;color:var(--ink);counter-increment:a2}
+  .a2-steps li::before{content:counter(a2);flex:none;width:24px;height:24px;border-radius:50%;background:var(--room);font:600 13px Inter,system-ui;display:flex;align-items:center;justify-content:center;color:var(--ink2)}
+  .a2-steps svg{display:inline-block;vertical-align:-4px;margin:0 2px}
+  .a2-steps b{font-weight:600}
+  .a2-point{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 6px);transform:translateX(-50%);z-index:21;font-size:22px;color:var(--ink);animation:a2bob 1.4s ease-in-out infinite;pointer-events:none}
+  @keyframes a2bob{50%{transform:translate(-50%,6px)}}
+  /* Running as the app: no browser bars, so give the top a touch more room. Keep pages from rubber-banding. */
+  html,body{overscroll-behavior:none;-webkit-touch-callout:none}
+  @media (display-mode: standalone){ .app{padding-top:calc(env(safe-area-inset-top) + 12px)} }
+  /* Themes */
+  .tgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .tcard{border:0;background:#fff;border-radius:18px;padding:8px 8px 12px;display:flex;flex-direction:column;gap:9px;font:500 15px Inter,system-ui;color:var(--ink);box-shadow:var(--rest);
+         transition:transform .25s var(--ease), box-shadow .25s}
+  .tcard i{position:relative;display:block;aspect-ratio:16/9;border-radius:12px;overflow:hidden}
+  .tcard i::after{content:"";position:absolute;left:30%;top:28%;width:40%;height:40%;border-radius:6px;background:#1C1B19;box-shadow:0 6px 12px -4px rgba(0,0,0,.4)}
+  .tcard[data-k="dark"] i::after,.tcard[data-k="tech"] i::after,.tcard[data-k="rain"] i::after,.tcard[data-k="jungle"] i::after,.tcard[data-k="aurora"] i::after{background:#3A3834}
+  .tcard.on{box-shadow:var(--rest),0 0 0 2.5px var(--ink)}
+  .tcard.on span::after{content:" ✓"}
+  .tcard:active{transform:scale(.97)}
+  .athemes{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  .athemes button{border:0;border-radius:999px;background:var(--room);padding:6px 12px 6px 6px;display:flex;align-items:center;gap:7px;font:500 13px Inter,system-ui;color:var(--ink2)}
+  .athemes button i{width:20px;height:20px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
+  .athemes button.on{background:var(--ink);color:#fff}
+  /* Compact chips, like the TV's Theme row; seven themes wrap onto two rows. */
+  .athemes{gap:6px;margin-top:4px}
+  .athemes button{padding:5px 10px 5px 5px;gap:6px;font-size:12.5px;white-space:nowrap;flex:none}
+  .athemes button i{width:16px;height:16px}
+  .tog{display:flex;align-items:center;justify-content:space-between}
+  .sw{width:46px;height:28px;border-radius:14px;background:var(--line);position:relative;transition:background .25s}
+  .sw i{position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .3s var(--ease)}
+  .tog[aria-checked="true"] .sw{background:var(--ok)}
+  .tog[aria-checked="true"] .sw i{transform:translateX(18px)}
+  /* Spaces: the title is a button; the picker grows out of it. */
+  .spbtn{border:0;background:none;display:flex;align-items:center;gap:6px;padding:6px 4px;margin:-6px -4px;min-width:0;font:inherit;color:inherit}
+  .spbtn .chev{flex:none;transition:transform .35s var(--ease)}
+  .spbtn[aria-expanded="true"] .chev{transform:rotate(180deg)}
+  .spaces{position:fixed;inset:0;z-index:25;background:var(--room);display:flex;flex-direction:column;gap:14px;
+          padding:calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 20px);
+          clip-path:inset(0 0 100% 0 round 0 0 32px 32px);transition:clip-path .5s cubic-bezier(.2,1,.3,1);pointer-events:none;overflow-y:auto}
+  .spaces.on{clip-path:inset(0 0 0 0 round 0);pointer-events:auto}
+  .sp-top{display:flex;justify-content:space-between;align-items:center;font-size:15px;color:var(--mute)}
+  .sp-top b{font-size:17px;color:var(--ink);font-weight:500}
+  .spc{border:0;text-align:left;background:#fff;border-radius:24px;box-shadow:var(--rest);padding:18px 18px 16px;display:flex;flex-direction:column;gap:12px;font:inherit;color:var(--ink);
+       opacity:0;transform:translateY(-16px) scale(.97);transition:transform .55s cubic-bezier(.2,1.25,.35,1), opacity .3s, box-shadow .3s}
+  .spaces.on .spc{opacity:1;transform:none}
+  .spc .h{display:flex;justify-content:space-between;align-items:baseline}
+  .spc .h b{font-size:24px;font-weight:600;letter-spacing:-.025em}
+  .spc .h span{font-size:13px;color:var(--mute)}
+  .spc .s{font-size:14px;color:var(--ink2);margin-top:-6px}
+  .spc .ic{display:flex;gap:8px;flex-wrap:wrap}
+  .spc .ic i{width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .spc .ic i svg{width:56%;height:56%}
+  .spc .ic .dw{font:600 8px Inter,system-ui;color:#fff}
+  .spc.on{box-shadow:var(--rest),0 0 0 2.5px var(--ink)}
+  .spc.on .h span::before{content:"✓ "}
+  .spc:active{transform:scale(.98)}
+  /* TV power: lights up when the TV is on; long-press for setup. */
+  @media (max-width:420px){.apps .lbl{display:none}.apps{width:32px;padding:0;justify-content:center}}
+  /* TV power lives at the top of the ••• sheet. */
+  .tpwr{width:100%;border:0;border-radius:20px;background:#fff;box-shadow:var(--rest);display:flex;align-items:center;gap:14px;padding:12px 16px 12px 12px;text-align:left;font:inherit;color:var(--ink);
+        transition:transform .2s var(--ease)}
+  .tpwr:active{transform:scale(.98)}
+  .tpwr .ti{flex:none;width:48px;height:48px;border-radius:50%;background:var(--room);display:flex;align-items:center;justify-content:center;transition:background .35s,color .35s,box-shadow .35s}
+  .tpwr .tt{display:flex;flex-direction:column;min-width:0;gap:2px}
+  .tpwr .tt b{font-size:17px;font-weight:600}
+  .tpwr .tt span{font-size:13px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tpwr.on .ti{background:var(--ink);color:#fff;box-shadow:0 0 0 4px rgba(60,139,90,.22)}
+  .tpwr.busy .ti svg{animation:pwrb 1s ease-in-out infinite}
+  .tpwr.lost .ti{color:var(--mute)}
+  .pwset{display:flex;flex-direction:column;gap:10px}
+  .pwset .ksub{font-size:13px}
+  .hchips button{padding:11px 0;font-size:14px}
+  .sheet-in{max-height:calc(100% - env(safe-area-inset-top) - 24px);overflow-y:auto}
+  /* Touchpad ⇄ arrow keys. A small round switch in the pad's corner; the layers cross-fade. */
+  .padswap{position:absolute;right:14px;bottom:14px;z-index:5;width:40px;height:40px;border:0;border-radius:50%;background:var(--room);color:var(--ink2);
+           display:flex;align-items:center;justify-content:center;transition:background .25s,transform .2s var(--ease)}
+  .padswap:active{transform:scale(.92)}
+  .padswap svg{position:absolute;transition:opacity .25s,transform .3s var(--ease)}
+  .padswap .i2{opacity:0;transform:scale(.7)}
+  .pad.keys .padswap .i1{opacity:0;transform:scale(.7)}
+  .pad.keys .padswap .i2{opacity:1;transform:none}
+  .keysv{position:absolute;inset:0;z-index:2;background:#fff;border-radius:32px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;
+         opacity:0;visibility:hidden;transition:opacity .25s var(--ease),visibility 0s .25s}
+  .pad.keys .keysv{opacity:1;visibility:visible;transition:opacity .25s var(--ease)}
+  .keysv .dpad{grid-template-columns:repeat(3,76px);grid-template-rows:repeat(3,76px);gap:10px;transform:scale(.97);transition:transform .3s var(--ease)}
+  .pad.keys .keysv .dpad{transform:none}
+  .keysv .k{background:var(--room);box-shadow:none;font-size:18px}
+  .keysv .k.ok{background:var(--ink);color:#fff}
+  .pad.keys .hint{opacity:0}
+  .pad:has(#vPair.on) .padswap,.pad:has(#vPair.on) .keysv{display:none}
+  .pad:has(.agrid.on) .padswap{opacity:0;pointer-events:none}
+  @keyframes pwrb{50%{opacity:.35}}
+  .hchips{display:flex;gap:8px}
+  .hchips button{flex:1;border:0;border-radius:14px;background:#fff;padding:14px 0;font:600 15px Inter,system-ui;color:var(--ink)}
+  .hchips button.on{background:var(--ink);color:#fff}
+  .tvhint{font-size:14px;line-height:1.45;color:#8A5A00;background:#FFF4DB;border-radius:12px;padding:10px 12px}
+  [hidden]{display:none !important}
+  .sheet{position:fixed;inset:0;background:rgba(28,27,25,.28);display:flex;align-items:flex-end;z-index:20}
+  .sheet-in{width:100%;background:var(--room);border-radius:28px 28px 0 0;padding:20px 20px calc(env(safe-area-inset-bottom) + 24px);display:flex;flex-direction:column;gap:16px;
+            animation:up .35s var(--ease)}
+  @keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+  .sheet-top{display:flex;justify-content:space-between;align-items:center;font-size:17px}
+  .x{border:0;background:none;font:600 16px Inter,system-ui;color:var(--ink)}
+  .dpad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(3,64px);gap:8px;justify-content:center}
+  .k{border:0;border-radius:18px;background:#fff;box-shadow:var(--rest);font:600 16px Inter,system-ui;color:var(--ink)}
+  .k:active{transform:scale(.94)}
+  .up{grid-area:1/2}.left{grid-area:2/1}.ok{grid-area:2/2;background:var(--ink);color:#fff}.right{grid-area:2/3}.down{grid-area:3/2}
+  .type{display:flex;gap:8px}
+  .type input{flex:1;min-width:0;border:0;border-radius:14px;background:#fff;padding:14px;font:16px Inter,system-ui;color:var(--ink);-webkit-user-select:text;user-select:text}
+  .type button,.cbtns button{border:0;border-radius:14px;background:var(--ink);color:#fff;font:600 15px Inter,system-ui;padding:0 18px}
+  .line{border:0;border-radius:14px;background:#fff;padding:15px;font:500 15px Inter,system-ui;color:var(--ink);text-align:left}
+  .danger{color:#B3261E}
+  .confirm{font-size:14px;color:var(--ink2);line-height:1.45;background:#fff;border-radius:14px;padding:14px}
+  .cbtns{display:flex;gap:8px;margin-top:10px}
+  .cbtns button{padding:11px 18px;background:var(--line);color:var(--ink)}
+  .cbtns .danger{background:#B3261E;color:#fff}
+  .kbd{position:fixed;left:0;right:0;top:0;z-index:30;padding:calc(env(safe-area-inset-top) + 10px) 12px 0}
+  .kbd-in{background:#fff;border-radius:22px;box-shadow:var(--lift);padding:14px;display:flex;flex-direction:column;gap:10px;animation:down .3s var(--ease)}
+  @keyframes down{from{transform:translateY(-16px);opacity:0}to{transform:none;opacity:1}}
+  .kbd-top{display:flex;justify-content:space-between;align-items:center}
+  .kbd-label{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
+  #kbdIn{width:100%;border:0;border-bottom:2px solid var(--ink);padding:10px 2px;font:500 20px Inter,system-ui;color:var(--ink);background:transparent;outline:none;-webkit-user-select:text;user-select:text}
+  .kbd-tap{border:0;border-radius:14px;background:var(--ink);color:#fff;font:600 16px Inter,system-ui;padding:14px}
+  .kbd-keys{display:flex;gap:8px}
+  .kbd-keys button{flex:1;border:0;border-radius:12px;background:var(--room);font:500 14px Inter,system-ui;color:var(--ink);padding:11px 6px}
+  .vs-why,.vs-note{font-size:14px;line-height:1.5;color:var(--ink2)}
+  .steps{margin:12px 0 4px 20px;display:flex;flex-direction:column;gap:8px;font-size:14px;line-height:1.45;color:var(--ink2)}
+  .steps b{color:var(--ink);font-weight:600}
+  .strong{display:block;text-decoration:none;font-weight:600}
+  .cta{border:0;border-radius:16px;background:var(--ink);color:#fff;font:600 16px Inter,system-ui;padding:16px;width:100%}
+  .vs-ok{font-size:16px;font-weight:600}
+  #vsTrust,#vsGo{display:flex;flex-direction:column;gap:12px}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="top" id="topbar"><button class="spbtn" id="spaceBtn" aria-haspopup="true" aria-expanded="false"><b id="spaceName">Living room</b><svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button><span class="tr"><button class="more apps" id="appsBtn" aria-label="All apps"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg><span class="lbl">Apps</span></button><span class="st" id="st"><i></i><span id="stText">Connecting…</span></span><button class="more" id="kbdBtn" aria-label="Keyboard">⌨︎</button><button class="more" id="more" aria-label="TV power and settings">•••</button></span></div>
+
+  <div class="bbar" id="bbar">
+    <button class="bb" id="navBack" aria-label="Back a page"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <button class="bb" id="navFwd" aria-label="Forward a page"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
+    <form class="addr" id="addrForm" action="#"><input id="addr" type="search" enterkeyhint="go" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Search or type a web address" aria-label="Address"></form>
+    <button class="bb" id="navReload" aria-label="Reload"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg></button>
+  </div>
+
+  <div class="media" id="media">
+    <button class="mbtn vid" data-a="back10">−10s</button>
+    <button class="mbtn" data-a="playpause">Play / Pause</button>
+    <button class="mbtn vid" data-a="fwd10">+10s</button>
+    <button class="mbtn mus" data-a="next" hidden>Next</button>
+    <button class="mbtn" data-a="voldown">Vol −</button>
+    <button class="mbtn" data-a="volup">Vol +</button>
+  </div>
+
+  <div class="pad" id="pad">
+    <div class="touch" id="touch"></div>
+    <div class="view on" id="vHome">
+      <div class="now" id="now">On screen</div>
+      <div class="logo" id="logo"></div>
+      <div class="svc" id="svc">Netflix</div>
+    </div>
+    <div class="view" id="vVoice"><div class="now">Listening</div><div class="said" id="said"></div></div>
+    <div class="view" id="vCount">
+      <svg class="ring" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17"/><circle id="arc" cx="20" cy="20" r="17"/></svg>
+      <div class="svc" id="cdText" style="font-size:20px"></div>
+      <button class="cancel" id="cancel">Cancel</button>
+    </div>
+    <div class="view" id="vPair">
+      <div class="now">Pair with your TV</div>
+      <div class="svc" style="font-size:20px">Enter the code on the TV</div>
+      <input id="codeIn" class="code" maxlength="7" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="K7Q4ZP">
+      <button class="cancel" id="pairGo">Connect</button>
+      <div class="err" id="pairErr"></div>
+    </div>
+    <div class="view" id="vPad"><div class="now">Touchpad</div><div class="svc" id="padSvc" style="font-size:20px"></div></div>
+    <div class="hint" id="hint">Swipe to move · Tap to open</div>
+    <div class="abar" id="abar" aria-live="polite">
+      <span class="ab-mark" id="abMark"></span>
+      <span class="ab-text" id="abText"></span>
+      <button class="ab-btn" id="abStop">Stop</button>
+      <button class="ab-btn" id="abKey" hidden>Add key</button>
+    </div>
+    <div class="keysv" id="keysv" aria-hidden="true">
+      <div class="now">Arrow keys</div>
+      <div class="dpad">
+        <button class="k up" data-k="ArrowUp" aria-label="Up">▲</button>
+        <button class="k left" data-k="ArrowLeft" aria-label="Left">◀</button>
+        <button class="k ok" data-k="Enter">OK</button>
+        <button class="k right" data-k="ArrowRight" aria-label="Right">▶</button>
+        <button class="k down" data-k="ArrowDown" aria-label="Down">▼</button>
+      </div>
+    </div>
+    <button class="padswap" id="padSwap" aria-label="Switch to arrow keys" aria-pressed="false">
+      <svg class="i1" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 3h5v6.5H21v5h-6.5V21h-5v-6.5H3v-5h6.5z"/></svg>
+      <svg class="i2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>
+    </button>
+    <div class="agrid" id="agrid" aria-hidden="true">
+      <div class="now">All apps</div>
+      <div class="atiles" id="atiles"></div>
+      <div class="ahint">Tap an app to open it</div>
+      <div class="athemes" id="athemes" aria-label="Theme" hidden style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <button class="btn" id="back" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <button class="mic" id="mic" aria-label="Hold to speak"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    <button class="btn" id="home" aria-label="Home"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9H4z"/></svg></button>
+  </div>
+  <div class="tip" id="tip">Hold to speak · “Open Spotify”</div>
+
+  <!-- Voice needs the secure address once: trust the TV box, then switch. -->
+  <div class="sheet" id="vsheet" hidden>
+    <div class="sheet-in">
+      <div class="sheet-top"><b>Set up voice (one time)</b><button class="x" id="vsX">Not now</button></div>
+      <p class="vs-why">iPhone only lets a page use the microphone over a secure connection. The TV box has its own certificate. Trust it once and voice works from then on.</p>
+      <div id="vsTrust">
+        <a class="line strong" id="vsGet" href="#" target="_blank" rel="noopener">Get the TV box certificate</a>
+        <ol class="steps">
+          <li>Safari asks to download a profile. Tap <b>Allow</b>.</li>
+          <li>Open <b>Settings › General › VPN &amp; Device Management</b>, tap <b>TV box</b>, then <b>Install</b>.</li>
+          <li>Open <b>Settings › General › About › Certificate Trust Settings</b> and turn on <b>TV box</b>.</li>
+          <li>Come back here and tap <b>Done</b>.</li>
+        </ol>
+        <button class="cta" id="vsDone">Done</button>
+      </div>
+      <div id="vsGo" hidden>
+        <p class="vs-ok">✓ Your phone trusts the TV box.</p>
+        <button class="cta" id="vsSwitch">Switch to the secure remote</button>
+        <p class="vs-note">You'll stay paired. Afterwards, add the new page to your Home Screen (Share › Add to Home Screen) and remove the old icon.</p>
+      </div>
+      <p class="err" id="vsErr"></p>
+    </div>
+  </div>
+
+  <!-- Keyboard: opens by itself when a text box on the TV is selected. Typing goes straight to the TV. -->
+  <div class="kbd" id="kbd" hidden>
+    <div class="kbd-in">
+      <div class="kbd-top"><span class="kbd-label" id="kbdLabel">Typing on the TV</span><button class="x" id="kbdDone">Done</button></div>
+      <input id="kbdIn" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
+      <button class="kbd-tap" id="kbdTap">Tap to type</button>
+      <div class="kbd-keys"><button id="kbdBack" aria-label="Delete">⌫ Delete</button><button id="kbdTab">Next field</button><button id="kbdEnter">Enter</button></div>
+      <div class="kbd-keys term-keys" id="termKeys" hidden><button data-k="Escape">Esc</button><button data-k="Tab" data-shift="1">⇧ Tab</button><button data-k="ArrowUp" aria-label="Up">↑</button><button data-k="ArrowDown" aria-label="Down">↓</button><button data-k="c" data-ctrl="1">Ctrl C</button></div>
+    </div>
+  </div>
+
+  <!-- Spaces: Living room, School, Games. Each is its own set of apps. -->
+  <div class="spaces" id="spaces" aria-hidden="true">
+    <div class="sp-top"><b>Spaces</b><button class="x" id="spX">Done</button></div>
+    <div id="spList" style="display:flex;flex-direction:column;gap:14px"></div>
+  </div>
+
+  <!-- Theme: how the TV looks. -->
+  <div class="sheet" id="tsheet" hidden>
+    <div class="sheet-in">
+      <div class="sheet-top"><b>TV theme</b><button class="x" id="tsX">Done</button></div>
+      <div class="tgrid" id="tgrid"></div>
+    </div>
+  </div>
+
+  <!-- Add to Home Screen: the remote as an app. -->
+  <div class="sheet" id="a2sheet" hidden>
+    <div class="sheet-in">
+      <div class="sheet-top"><b>Add to Home Screen</b><button class="x" id="a2X">Not now</button></div>
+      <div class="a2-head"><img src="icon.svg" alt=""><div><b>TV Remote</b><span>Opens straight to the remote, full screen.</span></div></div>
+      <div id="a2Secure" hidden style="display:flex;flex-direction:column;gap:12px">
+        <div class="ksub">Add it from the secure remote, so voice works in the app too.</div>
+        <button class="cta" id="a2GoSecure">Switch to the secure remote</button>
+      </div>
+      <ol class="a2-steps" id="a2Ios">
+        <li><span>Tap <b>Share</b> <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0A84FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Share"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg> at the bottom of Safari</span></li>
+        <li><span>Scroll down and tap <b>Add to Home Screen</b> <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M12 8v8M8 12h8"/></svg></span></li>
+        <li><span>Tap <b>Add</b> in the top corner</span></li>
+      </ol>
+      <ol class="a2-steps" id="a2Other" hidden>
+        <li><span>Open your browser’s <b>⋮</b> menu</span></li>
+        <li><span>Tap <b>Add to Home screen</b> or <b>Install app</b></span></li>
+      </ol>
+      <div class="ksub" id="a2Note">If the app asks, enter the code it shows on the TV. That only happens once.</div>
+    </div>
+  </div>
+  <div class="a2-point" id="a2Point" hidden aria-hidden="true">↓</div>
+
+  <!-- Claude key: lets voice requests run on their own. -->
+  <div class="sheet" id="ksheet" hidden>
+    <div class="sheet-in">
+      <div class="sheet-top"><b>Hands-free voice</b><button class="x" id="ksX">Done</button></div>
+      <div class="ksub">Add a Claude API key and requests like “play a jazz playlist on YouTube” happen on their own. No taps needed.</div>
+      <div class="kstat" id="kStat"><i></i><span id="kStatText">Checking…</span></div>
+      <div id="kSecure" hidden style="display:flex;flex-direction:column;gap:12px">
+        <div class="ksub">First, switch to the secure remote so your key travels safely to the TV box.</div>
+        <button class="cta" id="kGoSecure">Switch to the secure remote</button>
+      </div>
+      <div id="kForm" style="display:flex;flex-direction:column;gap:12px">
+        <div class="kfield"><input id="kIn" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…" aria-label="Claude API key"><button id="kPaste">Paste</button></div>
+        <button class="cta" id="kSave">Save key</button>
+        <div class="ksub">Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> → API keys. The key stays on your TV box.</div>
+        <button class="linkbtn" id="kRemove" hidden>Remove key</button>
+      </div>
+      <div class="err" id="kErr"></div>
+    </div>
+  </div>
+
+  <!-- •••: TV power first, then settings. Arrow keys now live on the pad (corner switch). -->
+  <div class="sheet" id="sheet" hidden>
+    <div class="sheet-in">
+      <div class="sheet-top"><b>TV</b><button class="x" id="sheetX" aria-label="Close">Done</button></div>
+      <button class="tpwr lost" id="pwrBtn" aria-label="TV power" aria-pressed="false"><span class="ti"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 3v8"/><path d="M6.3 7.2a8 8 0 1 0 11.4 0"/></svg></span><span class="tt"><b id="pwrLbl">TV power</b><span id="pwrSub">Looking for your TV…</span></span></button>
+      <div class="pwset" id="pwSet">
+        <div class="tvhint" id="pwHint" hidden></div>
+        <div class="ksub">TV box is on</div>
+        <div class="hchips" id="pwHdmi"><button data-h="1">HDMI 1</button><button data-h="2">HDMI 2</button><button data-h="3">HDMI 3</button><button data-h="4">HDMI 4</button></div>
+        <div id="pwIpBox" hidden style="display:flex;flex-direction:column;gap:10px">
+          <div class="ksub">Can’t find the TV. On the TV, open Settings → Network → About, and type the IP address here.</div>
+          <div class="kfield"><input id="pwIp" type="text" inputmode="decimal" autocomplete="off" placeholder="192.168.0.50" aria-label="TV IP address"><button id="pwIpGo">Use</button></div>
+          <button class="linkbtn" id="pwSearch" style="color:var(--ink)">Search again</button>
+        </div>
+      </div>
+      <button class="line" id="claudeKey">Hands-free voice (Claude key)<span id="claudeKeyHint" style="float:right;color:var(--mute)"></span></button>
+      <button class="line tog" id="soundLine" role="switch" aria-checked="true">TV sounds<span class="sw"><i></i></span></button>
+      <button class="line" id="themeLine">Theme<span id="themeHint" style="float:right;color:var(--mute)">Light</span></button>
+      <button class="line" id="a2Line">Add to Home Screen</button>
+      <button class="line" id="pairAnother">Pair another phone</button>
+      <button class="line danger" id="forget">Forget this TV</button>
+      <div class="confirm" id="forgetConfirm" hidden>This phone will stop controlling the TV until you pair again.
+        <div class="cbtns"><button id="forgetNo">Keep</button><button class="danger" id="forgetYes">Forget</button></div></div>
+    </div>
+  </div>
+</div>
+
+<script src="../shared/services.js"></script>
+<script src="../shared/link.js"></script>
+<script src="remote.js"></script>
+</body>
+</html>

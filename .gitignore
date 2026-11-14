@@ -1,0 +1,38 @@
+# macOS / Xcode
+.DS_Store
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.ipa
+*.dSYM*
+
+# Python / Node
+__pycache__/
+*.pyc
+node_modules/
+
+# Built installer (made by tv-box/box/build.sh)
+dist/
+
+# Game emulator binaries and game data (never commit)
+tv-box/games-bin/*.so
+tv-box/games-bin/*.so.*
+tv-box/games-bin/dshost
+*.nds
+*.sav
+*.dsv
+*.rom
+roms/
+saves/
+tv-box/games/art/*.jpg
+ios/TVRemote/Assets.xcassets/art-*.imageset/*.jpg
+
+# Secrets and box state
+.env
+.env.*
+settings.json
+server.json
+*.pem
+*.key
+*.crt

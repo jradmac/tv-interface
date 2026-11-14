@@ -1,0 +1,59 @@
+<title>Living Room TV</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Layout: the TV screen large on the left, the phone remote beside it; stacked on narrow screens. One light look, like the product. */
+  :root{
+    --room:#ECE9E3; --ink:#1C1B19; --ink2:#5E5B55; --mute:#8F8B83; --line:#DCD8CF; --bezel:#151515;
+    --sans:Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  html,body{height:100%}
+  body{background:var(--room);color:var(--ink);font-family:var(--sans);
+       padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:24px}
+  .wrap{max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+  header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px 24px}
+  h1{font-size:22px;font-weight:600;letter-spacing:-.02em;text-wrap:balance}
+  .how{font-size:14px;color:var(--ink2);max-width:70ch;line-height:1.5}
+  .rig{display:flex;gap:28px;align-items:flex-start}
+  .tvcol{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px}
+  .tv{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;background:var(--bezel);border-radius:14px;padding:10px;box-shadow:0 30px 60px -30px rgba(0,0,0,.45)}
+  .tv iframe{width:100%;height:100%;border:0;border-radius:6px;display:block;background:#F3F1EC}
+  .phone{flex:none;width:300px;max-width:100%;aspect-ratio:390/844;background:var(--bezel);border-radius:44px;padding:10px;box-shadow:0 30px 60px -30px rgba(0,0,0,.45)}
+  .phone iframe{width:100%;height:100%;border:0;border-radius:34px;display:block;background:#F3F1EC}
+  .label{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+  .tips{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;color:var(--ink2)}
+  .tips b{font-weight:600;color:var(--ink)}
+  .pcol{display:flex;flex-direction:column;gap:10px;align-items:center}
+  @media (max-width:900px){ .rig{flex-direction:column;align-items:stretch} .pcol{align-items:center} }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Living Room TV</h1>
+    <p class="how">A working preview of the TV home and the phone remote. On the real setup the phone is a separate device; here they sit side by side and talk to each other directly.</p>
+  </header>
+  <div class="rig">
+    <div class="tvcol">
+      <div class="label">TV</div>
+      <div class="tv"><iframe id="tv" title="TV screen" src="tv/index.html"></iframe></div>
+      <div class="tips">
+        <span><b>Swipe</b> the phone's white area left or right to move between cards</span>
+        <span><b>Tap</b> it to open a service</span>
+        <span><b>Hold the mic</b> to try a sample voice command (four in rotation)</span>
+        <span><b>Home</b> comes back from a service</span>
+      </div>
+    </div>
+    <div class="pcol">
+      <div class="label">Phone</div>
+      <div class="phone"><iframe id="remote" title="Phone remote" src="remote/index.html?local&amp;demo"></iframe></div>
+    </div>
+  </div>
+</div>
+<script>
+  // Reset pairing each visit so the pairing screen shows first.
+  try { localStorage.removeItem('tv-paired'); } catch (e) {}
+  // Load the phone a moment after the TV so the pairing step is visible.
+  const r = document.getElementById('remote'); const src = r.src; r.src = 'about:blank';
+  setTimeout(() => { r.src = src; }, 2500);
+</script>

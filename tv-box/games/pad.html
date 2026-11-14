@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#141416">
+<title>Game controller</title>
+<link rel="apple-touch-icon" href="../remote/icons/icon-180.png">
+<link rel="stylesheet" href="../shared/tokens.css">
+<style>
+  :root{--pad:#141416;--key:#25252A;--key-hi:#34343B;--keyink:#E9E6DF;--dim:#8C8880;--acc:#B9A8FF}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none;background:var(--pad);color:var(--keyink);
+            -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none;-webkit-tap-highlight-color:transparent}
+  body{font-family:Inter,system-ui,-apple-system,sans-serif}
+  .pad{position:fixed;inset:0;display:grid;padding:max(10px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+
+  /* Landscape (the main way to play): controls | screen | controls */
+  @media (orientation:landscape){
+    .pad{grid-template-columns:1fr auto 1fr;grid-template-rows:100%;column-gap:14px}
+    .side{display:flex;flex-direction:column;justify-content:space-between;align-items:center;min-width:0}
+    #screenwrap{height:100%;aspect-ratio:4/3;max-width:62vw}
+    .left{grid-column:1}.mid{grid-column:2}.right{grid-column:3}
+  }
+  /* Portrait: screen on top, controls below. */
+  @media (orientation:portrait){
+    .pad{grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr;row-gap:16px;column-gap:10px}
+    .mid{grid-column:1/3;grid-row:1}
+    #screenwrap{width:100%;aspect-ratio:4/3}
+    .side{display:flex;flex-direction:column;justify-content:space-around;align-items:center;grid-row:2}
+    .left{grid-column:1}.right{grid-column:2}
+    .turn{display:block!important}
+  }
+  .mid{display:flex;align-items:center;justify-content:center;min-height:0}
+  #screenwrap{position:relative;border-radius:10px;overflow:hidden;background:#000;box-shadow:0 0 0 1px rgba(255,255,255,.06),0 20px 50px rgba(0,0,0,.5)}
+  #screen{width:100%;height:100%;display:block;image-rendering:pixelated}
+  #wait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:15px;text-align:center;padding:20px}
+
+  .key{border:0;font-family:inherit;display:flex;align-items:center;justify-content:center;background:var(--key);color:var(--keyink);border-radius:999px;
+       box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 3px 10px rgba(0,0,0,.35);font-weight:600;transition:transform .06s,background .06s}
+  .key.on{background:var(--key-hi);transform:scale(.93)}
+  .sh{width:min(132px,100%);height:40px;border-radius:14px;font-size:15px;letter-spacing:.06em}
+  .row{display:flex;gap:10px;align-items:center}
+  .sm{height:30px;padding:0 14px;font-size:11px;letter-spacing:.12em;font-weight:600;color:var(--dim)}
+  .menu{width:44px;height:44px;color:var(--dim)}
+  .menu svg{width:20px;height:20px}
+  .view{height:44px;padding:0 14px;gap:7px;font-size:12px;letter-spacing:.04em;color:var(--dim)}
+  .view svg{width:18px;height:18px}
+
+  .dpad{position:relative;width:min(150px,38vmin);aspect-ratio:1}
+  .dpad i{position:absolute;background:var(--key);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 3px 10px rgba(0,0,0,.35)}
+  .dpad .h{left:0;right:0;top:33.3%;height:33.4%;border-radius:12px}
+  .dpad .v{top:0;bottom:0;left:33.3%;width:33.4%;border-radius:12px}
+  .dpad b{position:absolute;width:33.4%;height:33.4%;display:flex;align-items:center;justify-content:center;color:var(--dim);transition:color .06s}
+  .dpad b::after{content:'';border:7px solid transparent}
+  .dpad .u{left:33.3%;top:0}.dpad .u::after{border-bottom-color:currentColor;margin-top:-7px}
+  .dpad .d{left:33.3%;bottom:0}.dpad .d::after{border-top-color:currentColor;margin-bottom:-7px}
+  .dpad .l{left:0;top:33.3%}.dpad .l::after{border-right-color:currentColor;margin-left:-7px}
+  .dpad .r{right:0;top:33.3%}.dpad .r::after{border-left-color:currentColor;margin-right:-7px}
+  .dpad b.on{color:#fff}
+  .dpad.on-u .u,.dpad.on-d .d,.dpad.on-l .l,.dpad.on-r .r{color:#fff}
+
+  .abxy{position:relative;width:min(156px,40vmin);aspect-ratio:1}
+  .abxy .key{position:absolute;width:36%;height:36%;font-size:19px}
+  .abxy [data-b=x]{left:32%;top:0}.abxy [data-b=b]{left:32%;bottom:0}
+  .abxy [data-b=y]{left:0;top:32%}.abxy [data-b=a]{right:0;top:32%}
+
+  .turn{display:none;position:fixed;left:0;right:0;bottom:max(6px,env(safe-area-inset-bottom));text-align:center;font-size:12px;color:var(--dim)}
+
+  /* Menu sheet */
+  .sheet{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s}
+  .sheet.open{opacity:1;pointer-events:auto}
+  .card{width:min(760px,100%);max-height:94%;overflow:auto;background:#1D1D21;border-radius:22px 22px 0 0;padding:18px 18px max(18px,env(safe-area-inset-bottom));
+        transform:translateY(30px);transition:transform .3s var(--ease);touch-action:pan-y}
+  .sheet.open .card{transform:none}
+  .card h2{font-size:17px;font-weight:600;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .card h2 button{background:none;border:0;color:var(--dim);font:500 15px Inter,system-ui}
+  .big{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+  .btn{height:48px;border:0;border-radius:14px;background:var(--key);color:var(--keyink);font:600 15px Inter,system-ui;display:flex;align-items:center;justify-content:center;gap:8px}
+  .btn:active{background:var(--key-hi)}
+  .btn.acc{background:var(--acc);color:#16131F}
+  .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px;margin-bottom:16px}
+  .slot{background:#25252A;border-radius:14px;overflow:hidden}
+  .slot .img{aspect-ratio:4/3;background:#111 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#555;font-size:12px}
+  .slot .meta{padding:7px 9px 2px;font-size:12px;color:var(--dim);display:flex;justify-content:space-between}
+  .slot .meta b{color:var(--keyink);font-weight:600}
+  .slot .acts{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px 8px 8px}
+  .slot .acts button{height:32px;border:0;border-radius:9px;background:#34343B;color:var(--keyink);font:600 13px Inter,system-ui}
+  .slot .acts button:disabled{opacity:.35}
+  .slot .acts button.sure{background:var(--acc);color:#16131F}
+  @media (orientation:landscape){.big,.lower{grid-template-columns:repeat(4,1fr)}.big{margin-bottom:12px}.card h2{margin-bottom:10px}}
+  .seg{display:flex;align-items:center;gap:6px;background:#25252A;border-radius:14px;padding:5px;margin-bottom:16px}
+  .seg span{flex:1.2;font-size:13px;color:var(--dim);padding-left:10px}
+  .seg button{flex:1;height:38px;border:0;border-radius:10px;background:none;color:var(--keyink);font:600 14px Inter,system-ui}
+  .seg button.on{background:var(--acc);color:#16131F}
+  .lower{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .toast{position:fixed;left:50%;top:max(14px,env(safe-area-inset-top));transform:translate(-50%,-10px);background:rgba(40,40,46,.95);color:#fff;
+         padding:10px 18px;border-radius:999px;font-size:14px;font-weight:500;opacity:0;transition:opacity .25s,transform .25s var(--ease);pointer-events:none;white-space:nowrap}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="pad">
+  <div class="side left">
+    <div class="key sh" data-b="l">L</div>
+    <div class="dpad" id="dpad"><i class="h"></i><i class="v"></i><b class="u"></b><b class="d"></b><b class="l"></b><b class="r"></b></div>
+    <div class="row">
+      <button class="key menu" id="menuBtn" aria-label="Menu"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg></button>
+      <button class="key view" id="viewBtn" aria-label="TV screen size"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/></svg><span id="viewName">Fit</span></button>
+    </div>
+  </div>
+  <div class="mid"><div id="screenwrap"><canvas id="screen" width="256" height="192"></canvas><div id="wait">Connecting to the TV…</div></div></div>
+  <div class="side right">
+    <div class="key sh" data-b="r">R</div>
+    <div class="abxy"><div class="key" data-b="x">X</div><div class="key" data-b="y">Y</div><div class="key" data-b="a">A</div><div class="key" data-b="b">B</div></div>
+    <div class="row"><div class="key sm" data-b="select">SELECT</div><div class="key sm" data-b="start">START</div></div>
+  </div>
+</div>
+<div class="turn">Turn your phone sideways for a bigger screen</div>
+
+<div class="sheet" id="sheet">
+  <div class="card">
+    <h2><span id="gtitle">Game</span><button id="close">Resume</button></h2>
+    <div class="big">
+      <button class="btn acc" id="qsave">Quick save</button>
+      <button class="btn" id="qload">Quick load</button>
+    </div>
+    <div class="seg" id="seg"><span>TV screen</span><button data-v="fit">Fit</button><button data-v="fill">Fill</button><button data-v="stretch">Stretch</button></div>
+    <div class="slots" id="slots"></div>
+    <div class="lower">
+      <button class="btn" id="restart">Restart game</button>
+      <button class="btn" id="leave">Leave game</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="pad.js"></script>
+</body>
+</html>
