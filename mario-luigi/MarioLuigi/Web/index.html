@@ -70,29 +70,27 @@
   .sys{height:34px;padding:0 12px;font-size:10px;letter-spacing:.12em;color:var(--dim)}
   .sys.on{background:var(--key-hi)}
 
-  .dpad{position:relative;width:min(140px,36vmin);aspect-ratio:1}
-  .dpad i{position:absolute;background:var(--key);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 3px 10px rgba(0,0,0,.35)}
-  .dpad .h{left:0;right:0;top:33.3%;height:33.4%;border-radius:12px}
-  .dpad .v{top:0;bottom:0;left:33.3%;width:33.4%;border-radius:12px}
-  .dpad b{position:absolute;width:33.4%;height:33.4%;display:flex;align-items:center;justify-content:center;color:var(--dim)}
-  .dpad b::after{content:'';border:7px solid transparent}
-  .dpad .u{left:33.3%;top:0}.dpad .u::after{border-bottom-color:currentColor;margin-top:-7px}
-  .dpad .d{left:33.3%;bottom:0}.dpad .d::after{border-top-color:currentColor;margin-bottom:-7px}
-  .dpad .l{left:0;top:33.3%}.dpad .l::after{border-right-color:currentColor;margin-left:-7px}
-  .dpad .r{right:0;top:33.3%}.dpad .r::after{border-left-color:currentColor;margin-right:-7px}
-  .dpad.on-u .u,.dpad.on-d .d,.dpad.on-l .l,.dpad.on-r .r{color:#fff}
+  /* Joystick: appears where the left thumb lands. Sideways moves (all the way = run), up jumps, down squats
+     (down in the air = ground pound). */
+  #stickzone{position:relative;flex:1;width:100%;min-height:0;margin:8px 0;touch-action:none}
+  #stickbase{position:absolute;left:50%;top:55%;width:min(150px,38vmin);height:min(150px,38vmin);margin:calc(min(150px,38vmin) / -2) 0 0 calc(min(150px,38vmin) / -2);
+             border-radius:50%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.16);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+             transition:opacity .2s;opacity:.75;pointer-events:none}
+  #stickbase.live{opacity:1;transition:none}
+  #stickbase::before,#stickbase::after{content:'';position:absolute;left:50%;width:0;height:0;border:6px solid transparent;margin-left:-6px;opacity:.45}
+  #stickbase::before{top:8px;border-bottom-color:#fff}
+  #stickbase::after{bottom:8px;border-top-color:#fff}
+  #knob{position:absolute;left:50%;top:50%;width:44%;height:44%;margin:-22% 0 0 -22%;border-radius:50%;background:rgba(255,255,255,.28);
+        box-shadow:0 4px 14px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.35)}
+  #stickbase.run #knob{background:color-mix(in srgb,var(--acc) 70%,transparent)}
+  .stickhint{position:absolute;left:0;right:0;bottom:0;text-align:center;font-size:10px;letter-spacing:.14em;font-weight:600;color:var(--dim);pointer-events:none;opacity:.8}
 
-  .jumpwrap{position:relative;width:100%;flex:1;min-height:0;--j:min(100px,26vmin);--r:min(84px,22vmin);--s:min(50px,13vmin)}
-  .jumpwrap .key{position:absolute}
-  .jump{right:0;bottom:6%;width:var(--j);height:var(--j);font-size:19px;background:var(--jump)}
-  .jump.on{background:var(--jump-hi)}
-  .run{right:calc(var(--j) * .8);bottom:calc(6% + var(--j) * .7);width:var(--r);height:var(--r);font-size:15px;background:var(--run)}
-  .run.on,.runlock .run{background:var(--run-hi)}
-  .runlock .run{box-shadow:0 0 0 3px var(--acc)}
-  .ka{right:calc(var(--j) * .1);bottom:calc(6% + var(--j) + 16px);width:var(--s);height:var(--s);font-size:13px}
-  .kx{right:calc(var(--j) * .8 + var(--r) * .2);bottom:calc(6% + var(--j) * .7 + var(--r) + 12px);width:var(--s);height:var(--s);font-size:13px}
-  .ka.on,.kx.on{background:var(--key-hi)}
-
+  .actions{position:relative;width:100%;flex:1;min-height:0;--i:min(108px,28vmin);--o:min(66px,17vmin)}
+  .actions .key{position:absolute}
+  .itembtn{right:2px;bottom:8%;width:var(--i);height:var(--i);font-size:18px;background:var(--run)}
+  .itembtn.on{background:var(--run-hi)}
+  .okbtn{right:calc(var(--i) * .78);bottom:calc(8% + var(--i) * .82);width:var(--o);height:var(--o);font-size:15px;background:var(--jump)}
+  .okbtn.on{background:var(--jump-hi)}
   #turn{display:none;position:fixed;inset:0;background:var(--pad);z-index:9;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;padding:30px;color:var(--dim);font-size:16px}
   #turn svg{width:64px;height:64px;color:var(--keyink)}
   @media (orientation:portrait){ #turn{display:flex} }
@@ -131,10 +129,9 @@
 <div id="play">
   <div class="side left">
     <div class="row"><div class="key sys" data-b="start">START</div><div class="key sys" data-b="select">SELECT</div></div>
-    <div class="dpad" id="dpad"><i class="h"></i><i class="v"></i><b class="u"></b><b class="d"></b><b class="l"></b><b class="r"></b></div>
+    <div id="stickzone"><div id="stickbase"><div id="knob"></div></div><div class="stickhint">MOVE · UP JUMPS</div></div>
     <div class="row">
       <button class="key tool" id="menuBtn" aria-label="Menu"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg></button>
-      <button class="key tool" id="runLockBtn" aria-label="Keep running">Run lock</button>
     </div>
   </div>
   <div class="mid">
@@ -146,11 +143,9 @@
   </div>
   <div class="side right">
     <div id="smallslot"><canvas id="bot" width="256" height="192"></canvas><span class="swapico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13M3 13l4 4 4-4M17 20V7M13 11l4-4 4 4"/></svg></span></div>
-    <div class="jumpwrap" id="jumpwrap">
-      <div class="key kx" data-b="x">X</div>
-      <div class="key ka" data-b="a">A</div>
-      <div class="key run" data-b="y">RUN<small>Y</small></div>
-      <div class="key jump" data-b="b">JUMP<small>B</small></div>
+    <div class="actions">
+      <div class="key okbtn" data-b="a">OK<small>A</small></div>
+      <div class="key itembtn" data-b="y">ITEM<small>FIRE · GRAB</small></div>
     </div>
   </div>
 </div>

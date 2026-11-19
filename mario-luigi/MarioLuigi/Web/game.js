@@ -110,30 +110,46 @@
   }
 
   // ---- Buttons and the touch screen -----------------------------------------------------------
-  let mask = 0, stylus = null, touchXY = null, runLock = false;
-  const btnTouches = new Map(), dpad = $('dpad');
-  function dirAt(el, x, y) {
-    const r = el.getBoundingClientRect(), dx = x - (r.left + r.width / 2), dy = y - (r.top + r.height / 2);
-    if (Math.hypot(dx, dy) < r.width * 0.12) return 0;
-    const a = Math.atan2(dy, dx) * 180 / Math.PI;
+  let mask = 0, stylus = null, touchXY = null, stickMask = 0;
+  const btnTouches = new Map();
+  // ---- The joystick: lands under the left thumb, then reads the direction it's pushed --------------
+  const zone = $('stickzone'), base = $('stickbase'), knob = $('knob');
+  let stick = null;   // { id, x, y } where the thumb first landed
+  const stickR = () => base.getBoundingClientRect().width / 2;
+  function placeBase(x, y) {
+    const z = zone.getBoundingClientRect();
+    base.style.left = (x - z.left) + 'px'; base.style.top = (y - z.top) + 'px';
+  }
+  function moveStick(x, y) {
+    const r = stickR();
+    let dx = (x - stick.x) / r, dy = (y - stick.y) / r;
+    const len = Math.hypot(dx, dy);
+    if (len > 1) { dx /= len; dy /= len; }
+    knob.style.transform = `translate(${dx * r * 0.62}px, ${dy * r * 0.62}px)`;
     let m = 0;
-    if (a > -67.5 && a < 67.5) m |= 1 << BIT.right;
-    if (a > 112.5 || a < -112.5) m |= 1 << BIT.left;
-    if (a > 22.5 && a < 157.5) m |= 1 << BIT.down;
-    if (a < -22.5 && a > -157.5) m |= 1 << BIT.up;
-    return m;
+    if (Math.min(1, len) >= 0.22) {
+      if (dx > 0.3) m |= 1 << BIT.right;
+      if (dx < -0.3) m |= 1 << BIT.left;
+      if (dy < -0.5) m |= (1 << BIT.b) | (1 << BIT.up);   // up: jump (held = higher), and climb vines
+      if (dy > 0.55) m |= 1 << BIT.down;                  // down: squat; in the air: ground pound
+      if (Math.abs(dx) > 0.82) m |= 1 << BIT.y;          // pushed all the way sideways: run
+    }
+    base.classList.toggle('run', !!(m & (1 << BIT.y)));
+    if (m !== stickMask) { stickMask = m; recompute(true); }
+  }
+  function releaseStick() {
+    stick = null; stickMask = 0; knob.style.transform = ''; base.classList.remove('live', 'run');
+    base.style.left = ''; base.style.top = ''; recompute(true);
   }
   function maskFor(t) {
     const el = document.elementFromPoint(t.clientX, t.clientY);
     if (!el) return 0;
-    const d = el.closest('#dpad'); if (d) return dirAt(d, t.clientX, t.clientY);
     const b = el.closest('[data-b]'); return b ? 1 << BIT[b.dataset.b] : 0;
   }
   function paint() {
     document.querySelectorAll('[data-b]').forEach((el) => el.classList.toggle('on', !!(mask & (1 << BIT[el.dataset.b]))));
-    for (const [c, b] of [['u', 'up'], ['d', 'down'], ['l', 'left'], ['r', 'right']]) dpad.classList.toggle('on-' + c, !!(mask & (1 << BIT[b])));
   }
-  function recompute() { let m = 0; for (const v of btnTouches.values()) m |= v; if (m !== mask) { mask = m; paint(); sendInput(); } }
+  function recompute() { let m = stickMask; for (const v of btnTouches.values()) m |= v; if (m !== mask) { mask = m; paint(); sendInput(); } }
   const sheetOpen = () => $('sheet').classList.contains('open');
   const playing = () => document.body.classList.contains('playing');
   const inside = (el, t) => { const r = el.getBoundingClientRect(); return t.clientX >= r.left && t.clientX <= r.right && t.clientY >= r.top && t.clientY <= r.bottom; };
@@ -144,6 +160,9 @@
     e.preventDefault();
     for (const t of e.changedTouches) {
       if (stylus === null && bottomBig && inside(bot, t)) { stylus = t.identifier; touchXY = screenPoint(t); sendInput(); continue; }
+      if (!stick && inside(zone, t) && !(t.target.closest && t.target.closest('[data-b],.tool'))) {
+        stick = { id: t.identifier, x: t.clientX, y: t.clientY }; placeBase(t.clientX, t.clientY); base.classList.add('live'); moveStick(t.clientX, t.clientY); continue;
+      }
       btnTouches.set(t.identifier, maskFor(t));
     }
     recompute();
@@ -153,6 +172,7 @@
     e.preventDefault();
     for (const t of e.changedTouches) {
       if (t.identifier === stylus) { touchXY = screenPoint(t); sendInput(); }
+      else if (stick && t.identifier === stick.id) moveStick(t.clientX, t.clientY);
       else if (btnTouches.has(t.identifier)) btnTouches.set(t.identifier, maskFor(t));
     }
     recompute();
@@ -160,6 +180,7 @@
   const end = (e) => {
     for (const t of e.changedTouches) {
       if (t.identifier === stylus) { stylus = null; touchXY = null; sendInput(); }
+      if (stick && t.identifier === stick.id) releaseStick();
       btnTouches.delete(t.identifier);
     }
     recompute();
@@ -175,14 +196,9 @@
   addEventListener('keydown', (e) => { const b = KEYS[e.key]; if (b && playing() && !e.repeat) { btnTouches.set('k' + b, 1 << BIT[b]); recompute(); e.preventDefault(); } });
   addEventListener('keyup', (e) => { const b = KEYS[e.key]; if (b) { btnTouches.delete('k' + b); recompute(); } });
 
-  $('runLockBtn').addEventListener('click', () => {
-    runLock = !runLock; $('runLockBtn').classList.toggle('live', runLock); $('jumpwrap').classList.toggle('runlock', runLock);
-    toast(runLock ? 'Always running' : 'Hold RUN to run'); sendInput();
-  });
-
   // ---- Menu ---------------------------------------------------------------------------------
   let role = '', myName = '', room = '', roomInfo = { host: null, guest: null }, statsBy = {}, lite = false;
-  $('menuBtn').addEventListener('click', () => { $('sheet').classList.add('open'); btnTouches.clear(); recompute(); showWho(); });
+  $('menuBtn').addEventListener('click', () => { $('sheet').classList.add('open'); btnTouches.clear(); if (stick) releaseStick(); recompute(); showWho(); });
   $('close').onclick = () => $('sheet').classList.remove('open');
   $('sheet').addEventListener('click', (e) => { if (e.target === $('sheet')) $('sheet').classList.remove('open'); });
   async function shareCode() {
@@ -256,7 +272,7 @@
   }
 
   function sendInput() {
-    const keys = runLock ? mask | (1 << BIT.y) : mask;
+    const keys = mask;
     if (role === 'mario') { host && host.localInput(keys, touchXY); return; }
     const b = new Uint8Array(8);
     b[0] = K.INPUT; b[2] = keys & 255; b[3] = keys >> 8;
