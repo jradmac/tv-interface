@@ -151,20 +151,7 @@
   function paint() {
     document.querySelectorAll('[data-b]').forEach((el) => el.classList.toggle('on', !!(mask & (1 << BIT[el.dataset.b]))));
   }
-  function recompute() {
-    let m = stickMask; for (const v of btnTouches.values()) m |= v;
-    if (shakeStep === 1) m &= ~(1 << BIT.y); else if (shakeStep === 2) m |= 1 << BIT.y;
-    if (m !== mask) { mask = m; paint(); sendInput(); }
-  }
-  // Shake the phone to use the item (fireball etc.): a fresh press of Y, even while full tilt is already running (holding Y).
-  // The app calls mlShake() from the phone's motion sensor; a browser can use the F key.
-  let shakeStep = 0, shakeT = 0;
-  window.mlShake = () => {
-    if (!playing() || sheetOpen() || shakeStep) return false;
-    shakeStep = 1; recompute();
-    shakeT = setTimeout(() => { shakeStep = 2; recompute(); shakeT = setTimeout(() => { shakeStep = 0; recompute(); }, 130); }, 50);
-    return true;
-  };
+  function recompute() { let m = stickMask; for (const v of btnTouches.values()) m |= v; if (m !== mask) { mask = m; paint(); sendInput(); } }
   const sheetOpen = () => $('sheet').classList.contains('open');
   const playing = () => document.body.classList.contains('playing');
   const inside = (el, t) => { const r = el.getBoundingClientRect(); return t.clientX >= r.left && t.clientX <= r.right && t.clientY >= r.top && t.clientY <= r.bottom; };
@@ -208,8 +195,7 @@
   addEventListener('mousemove', (e) => { if (mouse) { touchXY = screenPoint(e); sendInput(); } });
   addEventListener('mouseup', () => { if (mouse) { mouse = false; touchXY = null; sendInput(); } });
   const KEYS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', z: 'b', x: 'y', a: 'x', s: 'a', Enter: 'start', Shift: 'select' };
-  addEventListener('keydown', (e) => { if (e.key === 'f' && !e.repeat) window.mlShake();
-    const b = KEYS[e.key]; if (b && playing() && !e.repeat) { btnTouches.set('k' + b, 1 << BIT[b]); recompute(); e.preventDefault(); } });
+  addEventListener('keydown', (e) => { const b = KEYS[e.key]; if (b && playing() && !e.repeat) { btnTouches.set('k' + b, 1 << BIT[b]); recompute(); e.preventDefault(); } });
   addEventListener('keyup', (e) => { const b = KEYS[e.key]; if (b) { btnTouches.delete('k' + b); recompute(); } });
 
   // ---- Menu ---------------------------------------------------------------------------------
