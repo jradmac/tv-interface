@@ -143,6 +143,20 @@
   #smallslot canvas{border-radius:10px;box-shadow:0 0 0 1px rgba(255,255,255,.14),0 10px 24px rgba(0,0,0,.55)}
   #smallslot .swapico{width:22px;height:22px;right:-5px;top:-5px;box-shadow:0 0 0 3px #141416}
   #screens canvas{border-radius:12px;box-shadow:0 0 0 1px rgba(255,255,255,.07),0 24px 60px rgba(0,0,0,.6)}
+
+  /* ---- Layout: each side keeps a fixed width so the joystick, OK and ITEM always fit beside the screen;
+     the game screen takes whatever is left, staying 4:3. ---- */
+  #play{--sw:clamp(148px,18.5vw,200px);grid-template-columns:var(--sw) minmax(0,1fr) var(--sw);column-gap:10px}
+  .mid{container-type:size;min-width:0;height:100%}
+  #screens{width:min(100cqw,100cqh * 4 / 3);height:auto;max-width:none;aspect-ratio:4/3}
+  #stickbase{width:min(132px,34vmin,calc(var(--sw) - 16px));height:min(132px,34vmin,calc(var(--sw) - 16px));
+             margin:calc(min(132px,34vmin,calc(var(--sw) - 16px)) / -2) 0 0 calc(min(132px,34vmin,calc(var(--sw) - 16px)) / -2)}
+  .actions{--i:min(94px,25vmin);--o:min(58px,15vmin)}
+  .itembtn{right:6px}
+  .okbtn{right:calc(6px + var(--i) * .74)}
+  #smallslot{width:min(128px,100% - 8px)}
+  #status{gap:6px;padding:14px}
+  #status .code{font-size:clamp(28px,9cqh,44px)}
 </style>
 </head>
 <body>
