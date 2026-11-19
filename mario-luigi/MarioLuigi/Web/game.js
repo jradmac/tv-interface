@@ -9,7 +9,7 @@
   const $ = (id) => document.getElementById(id);
   const BIT = { a: 0, b: 1, select: 2, start: 3, right: 4, left: 5, up: 6, down: 7, r: 8, l: 9, x: 10, y: 11 };
   const K = { INPUT: 3, VIDEO: 5, AUDIO: 6, MONO: 7 };
-  const DEFAULT_SERVER = '__SERVER__';   // filled in when the cloud server is set up; can be changed under "Server"
+  const DEFAULT_SERVER = 'https://tv-interface-production.up.railway.app';   // the Railway server; can be changed under "Server"
 
   const store = {
     get: (k, d = '') => { try { const v = localStorage.getItem('ml-' + k); return v == null ? d : v; } catch { return d; } },
