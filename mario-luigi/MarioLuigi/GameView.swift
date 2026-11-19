@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import CoreMotion
 
 /// The whole game is a web page served by `LocalServer` on 127.0.0.1, shown full screen.
 struct GameView: View {
@@ -44,6 +45,7 @@ struct GameWebView: UIViewRepresentable {
         web.isInspectable = true                    // Safari > Develop on the Mac can look inside
         #endif
         web.load(URLRequest(url: url))
+        context.coordinator.watchShakes(web)
         return web
     }
 
@@ -51,8 +53,31 @@ struct GameWebView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    static func dismantleUIView(_ web: WKWebView, coordinator: Coordinator) { coordinator.motion.stopDeviceMotionUpdates() }
+
     final class Coordinator: NSObject, WKNavigationDelegate {
+        let motion = CMMotionManager()
+        private var lastShake = Date.distantPast
+        private let tap = UIImpactFeedbackGenerator(style: .medium)
+
         // If the page ever crashes (memory), load it again instead of showing a blank screen.
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { webView.reload() }
+
+        /// Shake the phone to use the item (fireball etc.). A quick jolt over about 1.5 g, at most
+        /// about three times a second, calls mlShake() in the page.
+        func watchShakes(_ web: WKWebView) {
+            guard motion.isDeviceMotionAvailable else { return }
+            motion.deviceMotionUpdateInterval = 1.0 / 60.0
+            tap.prepare()
+            motion.startDeviceMotionUpdates(to: .main) { [weak self, weak web] data, _ in
+                guard let self, let web, let a = data?.userAcceleration else { return }
+                let g = (a.x * a.x + a.y * a.y + a.z * a.z).squareRoot()
+                guard g > 1.5, Date().timeIntervalSince(self.lastShake) > 0.35 else { return }
+                self.lastShake = Date()
+                web.evaluateJavaScript("window.mlShake ? window.mlShake() : false") { result, _ in
+                    if (result as? Bool) == true { self.tap.impactOccurred() }
+                }
+            }
+        }
     }
 }
