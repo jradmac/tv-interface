@@ -5,10 +5,12 @@
 //   3 Luigi -> Mario: buttons [3, 0, keysLo, keysHi, 0, touching, x, y]
 //   5 Mario -> Luigi: screen JPEG [5, 1, 0 top | 1 bottom, ...jpeg]
 //   6 Mario -> Luigi: sound, 16-bit stereo [6, 1, ...pcm]     7: data saver sound, 16-bit mono at half rate
+//   9 Mario -> big screens: Mario's screen JPEG [9, ...jpeg]   10: Mario's sound [10, rate u32, ...16-bit stereo]
+//   (only while a big-screen page from "Show on a big screen" is open; the relay says so with {t:'watchers'})
 (function () {
   const $ = (id) => document.getElementById(id);
   const BIT = { a: 0, b: 1, select: 2, start: 3, right: 4, left: 5, up: 6, down: 7, r: 8, l: 9, x: 10, y: 11 };
-  const K = { INPUT: 3, VIDEO: 5, AUDIO: 6, MONO: 7 };
+  const K = { INPUT: 3, VIDEO: 5, AUDIO: 6, MONO: 7, SHOT: 9, SOUND: 10 };
   const DEFAULT_SERVER = 'https://tv-interface-production.up.railway.app';   // the Railway server; can be changed under "Server"
 
   const store = {
@@ -207,6 +209,22 @@
     try { await navigator.clipboard.writeText(room); toast('Code copied: ' + room); } catch { toast('The code is ' + room); }
   }
   $('shareBtn').onclick = shareCode; $('sbtn').onclick = shareCode;
+  // "Show on a big screen": a link that opens Mario's screen, with sound, in any browser (TV, laptop).
+  const watchBtn = $('shareBtn').cloneNode(false);
+  watchBtn.id = 'watchBtn'; watchBtn.textContent = 'Show on a big screen'; watchBtn.hidden = true;
+  $('shareBtn').after(watchBtn);
+  const watchInfo = document.createElement('div');
+  watchInfo.id = 'watchInfo'; watchInfo.hidden = true;
+  watchInfo.style.cssText = 'font-size:13px;line-height:1.4;opacity:.8;text-align:center;word-break:break-all;user-select:text;-webkit-user-select:text;margin:2px 0 6px';
+  watchBtn.after(watchInfo);
+  const watchUrl = () => `${server()}/w/${room}?k=${wk}`;
+  watchBtn.onclick = async () => {
+    const url = watchUrl();
+    watchInfo.hidden = false;
+    watchInfo.innerHTML = `Open this in the TV or laptop browser:<br><b>${url.replace(/^https?:\/\//, '')}</b>`;
+    if (navigator.share) { try { await navigator.share({ title: 'Mario & Luigi on the big screen', url }); return; } catch {} }
+    try { await navigator.clipboard.writeText(url); toast('Big-screen link copied'); } catch {}
+  };
   $('liteBtn').onclick = () => {
     lite = !lite; store.set('lite', lite ? 'on' : 'off'); paintLite();
     sendText({ t: 'lite', on: lite }); toast(lite ? 'Data saver on' : 'Data saver off');
@@ -217,6 +235,7 @@
     const rows = [];
     const h = roomInfo.host, g = roomInfo.guest;
     rows.push(`Room code: <b>${room}</b>`);
+    if (role === 'mario' && watching) rows.push(`Big screen: showing on ${watching === 1 ? '1 screen' : watching + ' screens'}${watchSound ? ', with sound' : ''}`);
     rows.push(`Mario: ${h ? esc(h.name) + (h.away ? ' (reconnecting)' : '') : '—'}${role === 'mario' && statsBy[0] ? ` · ${statsBy[0].fps} fps` : ''}`);
     rows.push(`Luigi: ${g ? esc(g.name) + (g.away ? ' (reconnecting)' : '') : 'not here yet'}${role === 'mario' && statsBy[1] ? ` · ${statsBy[1].fps} fps` : ''}`);
     $('who').innerHTML = rows.join('<br>');
@@ -224,12 +243,13 @@
   const esc = (s) => String(s).replace(/[<>&"]/g, '');
 
   // ---- Talking to the relay -------------------------------------------------------------------
-  let ws = null, leaving = false, retry = 0, everOpen = false, waitingCode = false;
+  let ws = null, leaving = false, retry = 0, everOpen = false, waitingCode = false, wk = '', watching = 0, watchSound = false;
   function sendText(o) { try { ws && ws.readyState === 1 && ws.send(JSON.stringify(o)); } catch {} }
   const wsSend = (buf) => { if (ws && ws.readyState === 1 && ws.bufferedAmount < 2e6) ws.send(buf); };
   function connect() {
     const base = server().replace(/^http/, 'ws');
     const q = new URLSearchParams({ role: role === 'mario' ? 'host' : 'guest', room, name: myName, id: pid });
+    if (role === 'mario') q.set('wk', wk);
     const s = new WebSocket(`${base}/ws?${q}`);
     s.binaryType = 'arraybuffer';
     ws = s;
@@ -297,7 +317,8 @@
     startAudio();   // a tap is needed before a phone plays sound
     $('codeTag').textContent = role === 'mario' ? 'CODE ' + room : '';
     lite = role === 'luigi' && store.get('lite') === 'on'; paintLite(); $('liteBtn').hidden = role !== 'luigi';
-    $('shareBtn').hidden = role !== 'mario';
+    $('shareBtn').hidden = role !== 'mario'; watchBtn.hidden = role !== 'mario';
+    if (role === 'mario') { const abc = 'abcdefghjkmnpqrstuvwxyz23456789'; wk = ''; for (const b of crypto.getRandomValues(new Uint8Array(6))) wk += abc[b % abc.length]; }
     if (role === 'mario') {
       waitingCode = true;
       status('Starting the game…', 'Keep this phone plugged in if you can: it runs the game for both of you.');
@@ -354,7 +375,7 @@
         w.postMessage({ t: 'port', seat: s2, port: ch.port1 }, [ch.port1]);
         c2.worker.postMessage({ t: 'port', seat, port: ch.port2 }, [ch.port2]);
       }
-      if (mine) sendInput();
+      if (mine) { sendInput(); if (watching) w.postMessage({ t: 'map', on: true, mode: 'top' }); }
     }
     function retire(seat) {
       const c = consoles.get(seat); if (!c) return;
@@ -366,14 +387,18 @@
       const mine = seat === 0;
       if (d.t === 'frame') { if (mine) drawRaw(d.top, d.bot); }
       else if (d.t === 'audio') {
-        if (mine) playPcm(new Int16Array(d.pcm));
+        if (mine) {
+          // While a big screen plays the sound, this phone stays quiet so the two don't echo.
+          if (watching && watchSound) { const b = new Uint8Array(5 + d.pcm.byteLength); b[0] = K.SOUND; new DataView(b.buffer).setUint32(1, rate(), true); b.set(new Uint8Array(d.pcm), 5); wsSend(b); }
+          else playPcm(new Int16Array(d.pcm));
+        }
         else if (c.lite) {   // data saver: one channel at half the rate
           const st = new Int16Array(d.pcm), m1 = new Int16Array(st.length >> 2);
           for (let i = 0; i < m1.length; i++) m1[i] = (st[4 * i] + st[4 * i + 1] + st[4 * i + 2] + st[4 * i + 3]) >> 2;
           const out = new Uint8Array(2 + m1.byteLength); out[0] = K.MONO; out[1] = 1; out.set(new Uint8Array(m1.buffer), 2); wsSend(out);
         } else { const b = new Uint8Array(2 + d.pcm.byteLength); b[0] = K.AUDIO; b[1] = 1; b.set(new Uint8Array(d.pcm), 2); wsSend(b); }
       } else if (d.t === 'jpeg') {
-        if (mine) return;
+        if (mine) { if (d.which === 'map' && watching) { const j = new Uint8Array(d.buf), b = new Uint8Array(1 + j.length); b[0] = K.SHOT; b.set(j, 1); wsSend(b); } return; }
         const j = new Uint8Array(d.buf), b = new Uint8Array(3 + j.length); b[0] = K.VIDEO; b[1] = 1; b[2] = d.which === 'bot' ? 1 : 0; b.set(j, 3); wsSend(b);
       } else if (d.t === 'save') idbPut('save-' + seat, d.buf);
       else if (d.t === 'stats') statsBy[seat] = d;
@@ -385,7 +410,13 @@
       // Luigi left (or lost the connection for good): stop Luigi's console after a moment.
       else if (!g) guestGone = setTimeout(() => retire(1), 3000);
     }
+    function watchers(n, sound) {
+      watching = Math.max(0, n | 0); watchSound = !!sound && watching > 0;
+      const c = consoles.get(0); if (c && c.worker) c.worker.postMessage({ t: 'map', on: watching > 0, mode: 'top' });
+      if (sheetOpen()) showWho();
+    }
     function text(m) {
+      if (m.t === 'watchers') { const was = watching; watchers(m.n, m.sound); if (watching > was) toast('Showing on the big screen'); return; }
       if (m.t === 'hello') { guestRate = Math.max(8000, Math.min(96000, Number(m.rate) || 48000)); guestLite = !!m.lite; const c = consoles.get(1); if (c && c.worker) { c.lite = guestLite; c.worker.postMessage({ t: 'lite', on: guestLite }); } }
       else if (m.t === 'lite') { guestLite = !!m.on; const c = consoles.get(1); if (c) { c.lite = guestLite; c.worker && c.worker.postMessage({ t: 'lite', on: guestLite }); } }
     }
@@ -404,5 +435,5 @@
   setInterval(() => {
     if (role === 'mario' && waitingCode && shown && !codeHidden) status('Waiting for Luigi', 'On the other phone: open Mario & Luigi, tap Join, and type', room, true);
   }, 1000);
-  window.mlDebug = () => ({ role, room, roomInfo, stats: statsBy, drawn, audio: aqFrames, shown });
+  window.mlDebug = () => ({ role, room, roomInfo, stats: statsBy, drawn, audio: aqFrames, shown, wk, watching, watchSound });
 })();

@@ -4,9 +4,16 @@
 //   WS /ws?role=host&room=ABCD&name=Jared     Mario's phone (makes the room)
 //   WS /ws?role=guest&room=ABCD&name=Sam      Luigi's phone
 //   GET /health                               "ok"
+//   GET /w/ABCD?k=KEY                         the watch page: Mario's screen and sound on any big screen
+//   WS /ws?role=watch&room=ABCD&k=KEY         a watch page (Mario's phone sets KEY with &wk= when it makes the room)
+//   Binary kinds 9 (Mario's screen JPEG) and 10 (Mario's sound: u32 rate, then 16-bit stereo) go from Mario to watch pages.
 // Also answers under /ml/ (when a proxy keeps that prefix).
 import http from 'node:http';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const WATCH_PAGE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'watch.html');
 
 const PORT = Number(process.env.PORT || 8096), HOST = process.env.HOST || '0.0.0.0';
 const MAX_ROOMS = 50, MAX_MSG = 1 << 20, ROOM_IDLE = 6 * 3600e3, GRACE = 20000;
@@ -70,14 +77,25 @@ class Sock {
 const rooms = new Map();
 const clean = (s, n) => String(s || '').replace(/[^\p{L}\p{N} .'-]/gu, '').trim().slice(0, n);
 function info(r) { return { t: 'room', host: r.host ? { name: r.host.name, away: !r.host.sock } : null, guest: r.guest ? { name: r.guest.name, away: !r.guest.sock } : null }; }
-function tell(r) { const m = info(r); for (const side of ['host', 'guest']) { const p = r[side]; p && p.sock && p.sock.send(m); } }
+function tell(r) { const m = info(r); for (const side of ['host', 'guest']) { const p = r[side]; p && p.sock && p.sock.send(m); } for (const w of r.watchers) w.send(m); }
+// Mario's phone only makes the big-screen picture while a watch page is open (and its sound only if one asked for it).
+function tellWatchers(r) { const h = r.host; if (h && h.sock) h.sock.send({ t: 'watchers', n: r.watchers.size, sound: [...r.watchers].some((w) => w.sound) }); }
+function onWatch(s, code, key) {
+  const r = rooms.get(code);
+  if (!r || !r.host || !r.watchKey || key !== r.watchKey) { s.send({ t: 'error', msg: 'This screen link has ended. Make a new one in the game menu.' }); return s.close(1000); }
+  if (r.watchers.size >= 4) { s.send({ t: 'error', msg: 'Too many screens are watching this game.' }); return s.close(1000); }
+  r.watchers.add(s); log('watch', code, r.watchers.size);
+  s.onmessage = (txt) => { let m; try { m = JSON.parse(txt); } catch { return; } if (m.t === 'sound') { s.sound = !!m.on; tellWatchers(r); } };
+  s.onclose = () => { r.watchers.delete(s); tellWatchers(r); };
+  s.send(info(r)); tellWatchers(r);
+}
 function sweep() { const now = Date.now(); for (const [c, r] of rooms) if (!r.host && !r.guest || now - r.at > ROOM_IDLE) { for (const s of ['host', 'guest']) r[s] && r[s].sock && r[s].sock.close(1000); rooms.delete(c); } }
 setInterval(sweep, 60e3).unref();
 
-function onSocket(s, role, code, name, id) {
+function onSocket(s, role, code, name, id, wk) {
   let r = rooms.get(code);
   if (role === 'host') {
-    if (!r) { if (rooms.size >= MAX_ROOMS) sweep(); if (rooms.size >= MAX_ROOMS) { s.send({ t: 'error', msg: 'The server is busy. Try again in a minute.' }); return s.close(1000); } r = { host: null, guest: null, at: Date.now(), gone: {} }; rooms.set(code, r); }
+    if (!r) { if (rooms.size >= MAX_ROOMS) sweep(); if (rooms.size >= MAX_ROOMS) { s.send({ t: 'error', msg: 'The server is busy. Try again in a minute.' }); return s.close(1000); } r = { host: null, guest: null, at: Date.now(), gone: {}, watchers: new Set(), watchKey: '' }; rooms.set(code, r); }
     else if (r.host && r.host.id !== id) { s.send({ t: 'error', msg: 'That room is already taken. Make a new one.' }); return s.close(1000); }
   } else {
     if (!r || !r.host) { s.send({ t: 'error', msg: 'No game with that code. Check the letters with Mario.' }); return s.close(1000); }
@@ -87,6 +105,7 @@ function onSocket(s, role, code, name, id) {
   clearTimeout(r.gone[role]);
   if (me.sock && me.sock !== s) { const old = me.sock; old.onclose = () => {}; old.close(4000); }
   me.sock = s; me.name = name; r[role] = me; r.at = Date.now();
+  if (role === 'host' && wk) r.watchKey = wk;
   const other = () => r[role === 'host' ? 'guest' : 'host'];
   log('join', code, role, name);
   s.onmessage = (txt) => {
@@ -97,6 +116,10 @@ function onSocket(s, role, code, name, id) {
   };
   s.onbinary = (buf) => {
     r.at = Date.now();
+    if (role === 'host' && (buf[0] === 9 || buf[0] === 10)) {   // for the big screens only
+      for (const w of r.watchers) if (w.backlog < (buf[0] === 9 ? 250e3 : 500e3)) w.sendBinary(buf);
+      return;
+    }
     const o = other(); if (!o || !o.sock) return;
     // A slow connection: skip pictures it can't take yet (kind 5), so it never falls behind. Buttons always go.
     if (buf[0] === 5 && o.sock.backlog > 200e3) return;
@@ -106,11 +129,12 @@ function onSocket(s, role, code, name, id) {
   function drop() {
     if (r[role] !== me) return;
     r[role] = null; log('leave', code, role, name);
-    if (role === 'host') { const g = r.guest; if (g && g.sock) { g.sock.send({ t: 'ended' }); } rooms.delete(code); }
+    if (role === 'host') { const g = r.guest; if (g && g.sock) { g.sock.send({ t: 'ended' }); } for (const w of r.watchers) { w.send({ t: 'ended' }); w.close(1000); } rooms.delete(code); }
     else tell(r);
   }
   s.onclose = () => { if (me.sock !== s) return; me.sock = null; r.gone[role] = setTimeout(drop, GRACE); tell(r); };
   tell(r);
+  if (role === 'host') tellWatchers(r);
 }
 
 function accept(req, socket) {
@@ -123,6 +147,9 @@ function accept(req, socket) {
 const strip = (p) => (p.startsWith('/ml/') ? p.slice(3) : p);
 const server = http.createServer((req, res) => {
   const p = strip(new URL(req.url, 'http://x').pathname);
+  if (/^\/w\/[A-Za-z]{4}$/.test(p)) {
+    return fs.readFile(WATCH_PAGE, (e, d) => { if (e) { res.writeHead(500); return res.end('Watch page missing'); } res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' }); res.end(d); });
+  }
   if (p === '/health') { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); return res.end('ok'); }
   res.writeHead(404, { 'content-type': 'text/plain' }); res.end('Not found');
 });
@@ -130,8 +157,10 @@ server.on('upgrade', (req, socket) => {
   const url = new URL(req.url, 'http://x');
   if (strip(url.pathname) !== '/ws') return socket.destroy();
   const q = url.searchParams, role = q.get('role'), code = String(q.get('room') || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 6);
-  if (!['host', 'guest'].includes(role) || code.length !== 4) return socket.destroy();
+  if (!['host', 'guest', 'watch'].includes(role) || code.length !== 4) return socket.destroy();
   if (!accept(req, socket)) return;
-  onSocket(new Sock(socket), role, code, clean(q.get('name'), 10) || (role === 'host' ? 'Mario' : 'Luigi'), clean(q.get('id'), 40) || crypto.randomUUID());
+  const key = (v) => String(v || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 32);
+  if (role === 'watch') return onWatch(new Sock(socket), code, key(q.get('k')));
+  onSocket(new Sock(socket), role, code, clean(q.get('name'), 10) || (role === 'host' ? 'Mario' : 'Luigi'), clean(q.get('id'), 40) || crypto.randomUUID(), key(q.get('wk')));
 });
 server.listen(PORT, HOST, () => log(`Mario & Luigi relay on http://${HOST}:${PORT}`));
