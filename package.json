@@ -1,8 +1,7 @@
 {
-  "name": "tv-interface",
+  "name": "mario-luigi-relay-root",
   "private": true,
-  "description": "Railway runs the Mario & Luigi relay server from here (mario-luigi/relay). The TV box and iPhone code don't use this file.",
-  "type": "module",
+  "description": "Railway entry: runs the Mario & Luigi relay in mario-luigi/relay",
   "scripts": { "start": "node mario-luigi/relay/relay.mjs" },
   "engines": { "node": ">=18" }
 }
