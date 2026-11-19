@@ -1,0 +1,9 @@
+{
+  "name": "mario-luigi-relay",
+  "version": "1.0.0",
+  "description": "Connects two Mario & Luigi phones by a room code",
+  "type": "module",
+  "main": "relay.mjs",
+  "scripts": { "start": "node relay.mjs" },
+  "engines": { "node": ">=18" }
+}

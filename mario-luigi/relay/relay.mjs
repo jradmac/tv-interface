@@ -1,0 +1,137 @@
+// Mario & Luigi relay: connects two phones by a room code. It only passes messages between them:
+// Luigi's buttons to Mario's phone, and Luigi's pictures and sound back. The game itself never goes
+// through here. No packages needed:  node relay.mjs   (PORT, default 8096; HOST, default 0.0.0.0)
+//   WS /ws?role=host&room=ABCD&name=Jared     Mario's phone (makes the room)
+//   WS /ws?role=guest&room=ABCD&name=Sam      Luigi's phone
+//   GET /health                               "ok"
+// Also answers under /ml/ (when a proxy keeps that prefix).
+import http from 'node:http';
+import crypto from 'node:crypto';
+
+const PORT = Number(process.env.PORT || 8096), HOST = process.env.HOST || '0.0.0.0';
+const MAX_ROOMS = 50, MAX_MSG = 1 << 20, ROOM_IDLE = 6 * 3600e3, GRACE = 20000;
+const log = (...a) => console.log(new Date().toISOString().slice(0, 19), ...a);
+
+class Sock {
+  constructor(socket) {
+    this.socket = socket; this.buf = Buffer.alloc(0); this.frag = []; this.op = 1; this.open = true;
+    this.onmessage = () => {}; this.onbinary = () => {}; this.onclose = () => {};
+    socket.setNoDelay(true);
+    socket.on('data', (d) => this.read(d));
+    socket.on('close', () => this.closed());
+    socket.on('error', () => this.closed());
+  }
+  read(d) {
+    this.buf = this.buf.length ? Buffer.concat([this.buf, d]) : d;
+    for (;;) {
+      const b = this.buf;
+      if (b.length < 2) return;
+      const fin = b[0] & 0x80, op = b[0] & 0x0f, masked = b[1] & 0x80;
+      let len = b[1] & 0x7f, off = 2;
+      if (len === 126) { if (b.length < 4) return; len = b.readUInt16BE(2); off = 4; }
+      else if (len === 127) { if (b.length < 10) return; len = Number(b.readBigUInt64BE(2)); off = 10; }
+      if (len > MAX_MSG) return this.close(1009);
+      const need = off + (masked ? 4 : 0) + len;
+      if (b.length < need) return;
+      let data = b.subarray(off + (masked ? 4 : 0), need);
+      if (masked) { const m = b.subarray(off, off + 4); data = Buffer.from(data); for (let i = 0; i < data.length; i++) data[i] ^= m[i & 3]; }
+      this.buf = b.subarray(need);
+      if (op === 8) return this.close(1000);
+      if (op === 9) { this.frame(10, data); continue; }
+      if (op === 10) continue;
+      if (op === 1 || op === 2 || op === 0) {
+        if (op) this.op = op;
+        this.frag.push(data);
+        if (fin) {
+          const all = this.frag.length === 1 ? Buffer.from(this.frag[0]) : Buffer.concat(this.frag);
+          this.frag = [];
+          try { if (this.op === 2) this.onbinary(all); else this.onmessage(all.toString('utf8')); } catch (e) { log('message error', e.message); }
+        }
+      }
+    }
+  }
+  frame(op, payload) {
+    if (!this.open) return;
+    const p = Buffer.isBuffer(payload) ? payload : Buffer.from(payload);
+    let head;
+    if (p.length < 126) head = Buffer.from([0x80 | op, p.length]);
+    else if (p.length < 65536) { head = Buffer.alloc(4); head[0] = 0x80 | op; head[1] = 126; head.writeUInt16BE(p.length, 2); }
+    else { head = Buffer.alloc(10); head[0] = 0x80 | op; head[1] = 127; head.writeBigUInt64BE(BigInt(p.length), 2); }
+    try { this.socket.write(Buffer.concat([head, p])); } catch {}
+  }
+  send(msg) { this.frame(1, typeof msg === 'string' ? msg : JSON.stringify(msg)); }
+  sendBinary(buf) { this.frame(2, buf); }
+  get backlog() { return this.socket.writableLength; }
+  close(code = 1000) { if (!this.open) return; const p = Buffer.alloc(2); p.writeUInt16BE(code); this.frame(8, p); this.socket.end(); this.closed(); }
+  closed() { if (!this.open) return; this.open = false; try { this.socket.destroy(); } catch {} this.onclose(); }
+}
+
+// room code -> { host: {sock,name,id}|null, guest: {...}|null, at, gone: {host,guest} timers }
+const rooms = new Map();
+const clean = (s, n) => String(s || '').replace(/[^\p{L}\p{N} .'-]/gu, '').trim().slice(0, n);
+function info(r) { return { t: 'room', host: r.host ? { name: r.host.name, away: !r.host.sock } : null, guest: r.guest ? { name: r.guest.name, away: !r.guest.sock } : null }; }
+function tell(r) { const m = info(r); for (const side of ['host', 'guest']) { const p = r[side]; p && p.sock && p.sock.send(m); } }
+function sweep() { const now = Date.now(); for (const [c, r] of rooms) if (!r.host && !r.guest || now - r.at > ROOM_IDLE) { for (const s of ['host', 'guest']) r[s] && r[s].sock && r[s].sock.close(1000); rooms.delete(c); } }
+setInterval(sweep, 60e3).unref();
+
+function onSocket(s, role, code, name, id) {
+  let r = rooms.get(code);
+  if (role === 'host') {
+    if (!r) { if (rooms.size >= MAX_ROOMS) sweep(); if (rooms.size >= MAX_ROOMS) { s.send({ t: 'error', msg: 'The server is busy. Try again in a minute.' }); return s.close(1000); } r = { host: null, guest: null, at: Date.now(), gone: {} }; rooms.set(code, r); }
+    else if (r.host && r.host.id !== id) { s.send({ t: 'error', msg: 'That room is already taken. Make a new one.' }); return s.close(1000); }
+  } else {
+    if (!r || !r.host) { s.send({ t: 'error', msg: 'No game with that code. Check the letters with Mario.' }); return s.close(1000); }
+    if (r.guest && r.guest.id !== id && r.guest.sock) { s.send({ t: 'error', msg: 'Luigi is already playing in that game.' }); return s.close(1000); }
+  }
+  const me = r[role] && r[role].id === id ? r[role] : { id, name };
+  clearTimeout(r.gone[role]);
+  if (me.sock && me.sock !== s) { const old = me.sock; old.onclose = () => {}; old.close(4000); }
+  me.sock = s; me.name = name; r[role] = me; r.at = Date.now();
+  const other = () => r[role === 'host' ? 'guest' : 'host'];
+  log('join', code, role, name);
+  s.onmessage = (txt) => {
+    let m; try { m = JSON.parse(txt); } catch { return; }
+    if (m.t === 'ping') return s.send({ t: 'pong', at: m.at });
+    if (m.t === 'leave') { s.onclose = () => {}; drop(); return s.close(1000); }
+    const o = other(); if (o && o.sock) o.sock.send(txt);   // everything else goes to the other phone
+  };
+  s.onbinary = (buf) => {
+    r.at = Date.now();
+    const o = other(); if (!o || !o.sock) return;
+    // A slow connection: skip pictures it can't take yet (kind 5), so it never falls behind. Buttons always go.
+    if (buf[0] === 5 && o.sock.backlog > 200e3) return;
+    if (buf[0] !== 3 && o.sock.backlog > 600e3) return;
+    o.sock.sendBinary(buf);
+  };
+  function drop() {
+    if (r[role] !== me) return;
+    r[role] = null; log('leave', code, role, name);
+    if (role === 'host') { const g = r.guest; if (g && g.sock) { g.sock.send({ t: 'ended' }); } rooms.delete(code); }
+    else tell(r);
+  }
+  s.onclose = () => { if (me.sock !== s) return; me.sock = null; r.gone[role] = setTimeout(drop, GRACE); tell(r); };
+  tell(r);
+}
+
+function accept(req, socket) {
+  const key = req.headers['sec-websocket-key'];
+  if (!key) { socket.destroy(); return false; }
+  const ok = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+  socket.write(['HTTP/1.1 101 Switching Protocols', 'Upgrade: websocket', 'Connection: Upgrade', `Sec-WebSocket-Accept: ${ok}`, '', ''].join('\r\n'));
+  return true;
+}
+const strip = (p) => (p.startsWith('/ml/') ? p.slice(3) : p);
+const server = http.createServer((req, res) => {
+  const p = strip(new URL(req.url, 'http://x').pathname);
+  if (p === '/health') { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); return res.end('ok'); }
+  res.writeHead(404, { 'content-type': 'text/plain' }); res.end('Not found');
+});
+server.on('upgrade', (req, socket) => {
+  const url = new URL(req.url, 'http://x');
+  if (strip(url.pathname) !== '/ws') return socket.destroy();
+  const q = url.searchParams, role = q.get('role'), code = String(q.get('room') || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 6);
+  if (!['host', 'guest'].includes(role) || code.length !== 4) return socket.destroy();
+  if (!accept(req, socket)) return;
+  onSocket(new Sock(socket), role, code, clean(q.get('name'), 10) || (role === 'host' ? 'Mario' : 'Luigi'), clean(q.get('id'), 40) || crypto.randomUUID());
+});
+server.listen(PORT, HOST, () => log(`Mario & Luigi relay on http://${HOST}:${PORT}`));

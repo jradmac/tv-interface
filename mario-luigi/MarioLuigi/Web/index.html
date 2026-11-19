@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#141416">
+<title>Mario &amp; Luigi</title>
+<style>
+  :root{--pad:#141416;--key:#25252A;--key-hi:#34343B;--keyink:#E9E6DF;--dim:#8C8880;--mario:#E5483B;--luigi:#3FAE49;--acc:#E5483B;
+        --jump:#3B356A;--jump-hi:#4A4385;--run:#5A3550;--run-hi:#6E4262}
+  body.luigi{--acc:#3FAE49}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none;background:var(--pad);color:var(--keyink);
+            -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none;-webkit-tap-highlight-color:transparent}
+  body{font-family:-apple-system,system-ui,Inter,sans-serif}
+  button{font-family:inherit}
+
+  /* ---- Home ---- */
+  #home{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;gap:28px;
+        padding:max(16px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left))}
+  body.playing #home{display:none}
+  .brand{display:flex;flex-direction:column;gap:10px;max-width:300px}
+  .brand h1{font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1.05}
+  .brand h1 span:first-child{color:var(--mario)} .brand h1 span:last-child{color:var(--luigi)}
+  .brand p{color:var(--dim);font-size:14px;line-height:1.45}
+  .choices{display:flex;flex-direction:column;gap:12px;width:min(360px,52vw)}
+  .field{height:48px;border-radius:14px;border:0;background:var(--key);color:var(--keyink);font:600 18px -apple-system,system-ui;padding:0 14px;outline:none;width:100%;
+         user-select:text;-webkit-user-select:text;touch-action:manipulation}
+  .big{height:54px;border:0;border-radius:16px;font:700 17px -apple-system,system-ui;color:#fff;touch-action:manipulation;width:100%}
+  .big.mario{background:var(--mario)} .big.luigi{background:var(--luigi)}
+  .big:disabled{opacity:.5}
+  .joinrow{display:flex;gap:10px}
+  .joinrow .field{flex:0 0 120px;text-align:center;letter-spacing:.3em;text-transform:uppercase}
+  #hmsg{min-height:18px;font-size:13px;color:var(--dim);line-height:1.4}
+  .link{background:none;border:0;color:var(--dim);font-size:13px;text-decoration:underline;align-self:flex-start;touch-action:manipulation}
+  #serverRow{display:none;gap:8px}
+  #serverRow.open{display:flex}
+  #serverRow .field{font-size:14px;height:40px}
+  #serverRow button{border:0;border-radius:12px;background:var(--key-hi);color:var(--keyink);padding:0 14px;font-weight:600}
+
+  /* ---- Play ---- */
+  #play{position:fixed;inset:0;display:none;grid-template-columns:1fr auto 1fr;column-gap:12px;
+        padding:max(8px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+  body.playing #play{display:grid}
+  .side{display:flex;flex-direction:column;align-items:center;justify-content:space-between;min-width:0;padding:4px 0}
+  .mid{position:relative;display:flex;align-items:center;justify-content:center;min-height:0}
+  #screens{position:relative;height:100%;aspect-ratio:4/3;max-width:56vw}
+  #screens canvas{position:absolute;display:block;image-rendering:pixelated;background:#000;border-radius:10px;inset:0;width:100%;height:100%;
+                  box-shadow:0 0 0 1px rgba(255,255,255,.06),0 20px 50px rgba(0,0,0,.5)}
+  #smallslot{position:relative;width:min(140px,100%);aspect-ratio:4/3;flex:none}
+  #smallslot canvas{position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:pixelated;background:#000;border-radius:8px;box-shadow:0 0 0 2px rgba(255,255,255,.35),0 6px 18px rgba(0,0,0,.6)}
+  #smallslot .swapico{position:absolute;right:-6px;top:-6px;width:24px;height:24px;border-radius:12px;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  #smallslot .swapico svg{width:14px;height:14px}
+  #status{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:20px;
+          color:var(--keyink);font-size:16px;background:rgba(20,20,22,.9);border-radius:10px;z-index:3}
+  #status small{color:var(--dim);font-size:13px;max-width:320px;line-height:1.4}
+  #status .code{font-size:44px;font-weight:800;letter-spacing:.25em;color:var(--acc);margin-left:.25em}
+  #status button{margin-top:6px;height:40px;padding:0 18px;border:0;border-radius:12px;background:var(--key-hi);color:var(--keyink);font-weight:600}
+  #codeTag{position:absolute;left:8px;top:8px;z-index:2;background:rgba(0,0,0,.6);color:#fff;font-size:12px;font-weight:700;letter-spacing:.12em;padding:4px 9px;border-radius:999px;pointer-events:none}
+  #codeTag:empty{display:none}
+
+  .key{border:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:var(--key);color:var(--keyink);border-radius:999px;
+       box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 3px 10px rgba(0,0,0,.35);font-weight:700;transition:transform .06s,background .06s}
+  .key small{font-size:10px;letter-spacing:.14em;font-weight:600;opacity:.7}
+  .key.on{transform:scale(.93)}
+  .row{display:flex;gap:8px;align-items:center}
+  .tool{height:40px;padding:0 13px;gap:6px;flex-direction:row;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--dim)}
+  .tool svg{width:18px;height:18px}
+  .tool.live{background:var(--acc);color:#fff}
+  .sys{height:34px;padding:0 12px;font-size:10px;letter-spacing:.12em;color:var(--dim)}
+  .sys.on{background:var(--key-hi)}
+
+  .dpad{position:relative;width:min(140px,36vmin);aspect-ratio:1}
+  .dpad i{position:absolute;background:var(--key);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 3px 10px rgba(0,0,0,.35)}
+  .dpad .h{left:0;right:0;top:33.3%;height:33.4%;border-radius:12px}
+  .dpad .v{top:0;bottom:0;left:33.3%;width:33.4%;border-radius:12px}
+  .dpad b{position:absolute;width:33.4%;height:33.4%;display:flex;align-items:center;justify-content:center;color:var(--dim)}
+  .dpad b::after{content:'';border:7px solid transparent}
+  .dpad .u{left:33.3%;top:0}.dpad .u::after{border-bottom-color:currentColor;margin-top:-7px}
+  .dpad .d{left:33.3%;bottom:0}.dpad .d::after{border-top-color:currentColor;margin-bottom:-7px}
+  .dpad .l{left:0;top:33.3%}.dpad .l::after{border-right-color:currentColor;margin-left:-7px}
+  .dpad .r{right:0;top:33.3%}.dpad .r::after{border-left-color:currentColor;margin-right:-7px}
+  .dpad.on-u .u,.dpad.on-d .d,.dpad.on-l .l,.dpad.on-r .r{color:#fff}
+
+  .jumpwrap{position:relative;width:100%;flex:1;min-height:0;--j:min(100px,26vmin);--r:min(84px,22vmin);--s:min(50px,13vmin)}
+  .jumpwrap .key{position:absolute}
+  .jump{right:0;bottom:6%;width:var(--j);height:var(--j);font-size:19px;background:var(--jump)}
+  .jump.on{background:var(--jump-hi)}
+  .run{right:calc(var(--j) * .8);bottom:calc(6% + var(--j) * .7);width:var(--r);height:var(--r);font-size:15px;background:var(--run)}
+  .run.on,.runlock .run{background:var(--run-hi)}
+  .runlock .run{box-shadow:0 0 0 3px var(--acc)}
+  .ka{right:calc(var(--j) * .1);bottom:calc(6% + var(--j) + 16px);width:var(--s);height:var(--s);font-size:13px}
+  .kx{right:calc(var(--j) * .8 + var(--r) * .2);bottom:calc(6% + var(--j) * .7 + var(--r) + 12px);width:var(--s);height:var(--s);font-size:13px}
+  .ka.on,.kx.on{background:var(--key-hi)}
+
+  #turn{display:none;position:fixed;inset:0;background:var(--pad);z-index:9;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;padding:30px;color:var(--dim);font-size:16px}
+  #turn svg{width:64px;height:64px;color:var(--keyink)}
+  @media (orientation:portrait){ #turn{display:flex} }
+
+  .sheet{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s;z-index:10}
+  .sheet.open{opacity:1;pointer-events:auto}
+  .card{width:min(560px,100%);background:#1D1D21;border-radius:22px 22px 0 0;padding:18px 18px max(18px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px}
+  .card h2{font-size:17px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+  .card h2 button{background:none;border:0;color:var(--dim);font:500 15px -apple-system,system-ui}
+  #who{font-size:14px;color:var(--dim);line-height:1.5}
+  .btn{height:46px;border:0;border-radius:14px;background:var(--key);color:var(--keyink);font:600 15px -apple-system,system-ui}
+  .toast{position:fixed;left:50%;top:max(14px,env(safe-area-inset-top));transform:translate(-50%,-10px);background:rgba(40,40,46,.95);color:#fff;z-index:11;
+         padding:10px 18px;border-radius:999px;font-size:14px;font-weight:500;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div id="home">
+  <div class="brand">
+    <h1><span>Mario</span> &amp; <span>Luigi</span></h1>
+    <p>Super Mario Bros. together, each on your own phone. Mario starts a game and gets a 4-letter code. Luigi types the code to join, from anywhere.</p>
+  </div>
+  <div class="choices">
+    <input id="name" class="field" maxlength="10" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Your name">
+    <button class="big mario" id="startBtn">Start a game as Mario</button>
+    <div class="joinrow">
+      <input id="code" class="field" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE">
+      <button class="big luigi" id="joinBtn">Join as Luigi</button>
+    </div>
+    <div id="hmsg"></div>
+    <button class="link" id="serverLink">Server</button>
+    <div id="serverRow"><input id="server" class="field" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…"><button id="serverSave">Save</button></div>
+  </div>
+</div>
+
+<div id="play">
+  <div class="side left">
+    <div class="row"><div class="key sys" data-b="start">START</div><div class="key sys" data-b="select">SELECT</div></div>
+    <div class="dpad" id="dpad"><i class="h"></i><i class="v"></i><b class="u"></b><b class="d"></b><b class="l"></b><b class="r"></b></div>
+    <div class="row">
+      <button class="key tool" id="menuBtn" aria-label="Menu"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg></button>
+      <button class="key tool" id="runLockBtn" aria-label="Keep running">Run lock</button>
+    </div>
+  </div>
+  <div class="mid">
+    <div id="screens">
+      <canvas id="top" width="256" height="192"></canvas>
+      <div id="codeTag"></div>
+      <div id="status"><span id="stext">Starting…</span><small id="ssub"></small><span class="code" id="scode"></span><button id="sbtn" hidden>Share the code</button></div>
+    </div>
+  </div>
+  <div class="side right">
+    <div id="smallslot"><canvas id="bot" width="256" height="192"></canvas><span class="swapico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13M3 13l4 4 4-4M17 20V7M13 11l4-4 4 4"/></svg></span></div>
+    <div class="jumpwrap" id="jumpwrap">
+      <div class="key kx" data-b="x">X</div>
+      <div class="key ka" data-b="a">A</div>
+      <div class="key run" data-b="y">RUN<small>Y</small></div>
+      <div class="key jump" data-b="b">JUMP<small>B</small></div>
+    </div>
+  </div>
+</div>
+
+<div id="turn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M20 8a8 8 0 0 1 0 8M17.5 10.5l2.5-2.5 2 2.5"/></svg>Turn your phone sideways to play</div>
+
+<div class="sheet" id="sheet">
+  <div class="card">
+    <h2><span id="sheetTitle">Mario &amp; Luigi</span><button id="close">Back</button></h2>
+    <div id="who"></div>
+    <button class="btn" id="shareBtn">Share the code</button>
+    <button class="btn" id="liteBtn" hidden>Data saver: off</button>
+    <button class="btn" id="leave">Leave the game</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="game.js"></script>
+</body>
+</html>
