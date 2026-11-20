@@ -374,6 +374,19 @@
     return new Promise((res, rej) => { const r = indexedDB.open('mario-luigi', 1); r.onupgradeneeded = () => r.result.createObjectStore('files'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
   }
   async function idbGet(key) { try { const db = await idb(); return await new Promise((res) => { const r = db.transaction('files').objectStore('files').get(key); r.onsuccess = () => res(r.result); r.onerror = () => res(null); }); } catch { return null; } }
+  // Game saves. In the app they go to a file inside the app (the app's own server, /save/NAME), so they
+  // survive the app restarting; the browser copy (IndexedDB) stays as a backup.
+  const inApp = /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
+  async function loadSave(key) {
+    if (inApp) { try { const r = await fetch('/save/' + key, { cache: 'no-store' }); if (r.ok) { const b = await r.arrayBuffer(); if (b.byteLength) return b; } } catch {} }
+    return idbGet(key);
+  }
+  // Leaving the app (home screen, lock): write the saves out now rather than in a moment.
+  document.addEventListener('visibilitychange', () => { if (document.hidden && host) host.flush(); });
+  function storeSave(key, buf) {
+    if (inApp) fetch('/save/' + key, { method: 'PUT', body: buf.slice(0) }).catch(() => {});
+    idbPut(key, buf);
+  }
   async function idbPut(key, val) { try { const db = await idb(); await new Promise((res) => { const t = db.transaction('files', 'readwrite'); t.objectStore('files').put(val, key); t.oncomplete = res; t.onerror = res; }); } catch {} }
 
   function createHost() {
@@ -399,7 +412,7 @@
       const mine = seat === 0;
       const c = { worker: null, lite: mine ? false : guestLite };
       consoles.set(seat, c);
-      const saved = await idbGet('save-' + seat);
+      const saved = await loadSave('save-' + seat);
       if (stopped || consoles.get(seat) !== c) return;
       const w = new Worker('worker.js');
       c.worker = w;
@@ -438,7 +451,7 @@
       } else if (d.t === 'jpeg') {
         if (mine) { if (d.which === 'map' && watching) { const j = new Uint8Array(d.buf), b = new Uint8Array(1 + j.length); b[0] = K.SHOT; b.set(j, 1); wsSend(b); } return; }
         const j = new Uint8Array(d.buf), b = new Uint8Array(3 + j.length); b[0] = K.VIDEO; b[1] = 1; b[2] = d.which === 'bot' ? 1 : 0; b.set(j, 3); wsSend(b);
-      } else if (d.t === 'save') idbPut('save-' + seat, d.buf);
+      } else if (d.t === 'save') storeSave('save-' + seat, d.buf);
       else if (d.t === 'stats') statsBy[seat] = d;
       else if (d.t === 'error') status('The game could not start', d.msg);
     }
@@ -463,8 +476,9 @@
       c.worker.postMessage({ t: 'input', keys: u[2] | (u[3] << 8), steer: 0, touch: u[5] ? [u[6], u[7]] : null });
     }
     function localInput(keys, t) { const c = consoles.get(0); if (c && c.worker) c.worker.postMessage({ t: 'input', keys, steer: 0, touch: t }); }
+    function flush() { for (const c of consoles.values()) c.worker && c.worker.postMessage({ t: 'save' }); }
     function stop() { stopped = true; for (const seat of [...consoles.keys()]) retire(seat); }
-    return { start, hello, guest, text, input, localInput, stop };
+    return { start, hello, guest, text, input, localInput, flush, stop };
   }
 
   // The code stays on the screen until Luigi joins. Tap it to look at the game meanwhile (it's also in the corner).
