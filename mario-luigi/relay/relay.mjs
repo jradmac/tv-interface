@@ -14,6 +14,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const WATCH_PAGE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'watch.html');
+// The browser Luigi page (/play/ABCD): the app's own page and script. Luigi's side never runs the game,
+// so only these two files are served (never the game file).
+const APP_WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'MarioLuigi', 'Web');
+const PLAY_FILES = { 'index.html': 'text/html; charset=utf-8', 'game.js': 'text/javascript; charset=utf-8' };
 
 const PORT = Number(process.env.PORT || 8096), HOST = process.env.HOST || '0.0.0.0';
 const MAX_ROOMS = 50, MAX_MSG = 1 << 20, ROOM_IDLE = 6 * 3600e3, GRACE = 20000;
@@ -149,6 +153,10 @@ const server = http.createServer((req, res) => {
   const p = strip(new URL(req.url, 'http://x').pathname);
   if (/^\/w\/[A-Za-z]{4}$/.test(p)) {
     return fs.readFile(WATCH_PAGE, (e, d) => { if (e) { res.writeHead(500); return res.end('Watch page missing'); } res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' }); res.end(d); });
+  }
+  const play = p.match(/^\/play(?:\/([A-Za-z]{4}))?\/?$/) ? 'index.html' : (p.match(/^\/play\/(?:[A-Za-z]{4}\/)?game\.js$/) ? 'game.js' : null);
+  if (play) {
+    return fs.readFile(path.join(APP_WEB, play), (e, d) => { if (e) { res.writeHead(500); return res.end('Page missing'); } res.writeHead(200, { 'content-type': PLAY_FILES[play], 'cache-control': 'no-cache' }); res.end(d); });
   }
   if (p === '/health') { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); return res.end('ok'); }
   res.writeHead(404, { 'content-type': 'text/plain' }); res.end('Not found');

@@ -18,9 +18,21 @@
     set: (k, v) => { try { localStorage.setItem('ml-' + k, v); } catch {} },
   };
   let pid = store.get('pid'); if (!pid) { pid = Math.random().toString(36).slice(2, 12); store.set('pid', pid); }
-  const server = () => (store.get('server') || (DEFAULT_SERVER.startsWith('http') ? DEFAULT_SERVER : '')).replace(/\/+$/, '');
+  // Browser Luigi: the page opened from Mario's invite link (<server>/play/ABCD) in Safari or any browser.
+  // It can only join (Mario's phone runs the game in the app), and it talks to the server it came from.
+  const webPlay = /^\/play(\/|$)/.test(location.pathname) && /^https?:$/.test(location.protocol);
+  const linkCode = webPlay ? ((location.pathname.match(/^\/play\/([A-Za-z]{4})/) || [])[1] || '').toUpperCase() : '';
+  const server = () => webPlay ? location.origin : (store.get('server') || (DEFAULT_SERVER.startsWith('http') ? DEFAULT_SERVER : '')).replace(/\/+$/, '');
   $('name').value = store.get('name');
   $('server').value = server();
+  if (webPlay) {
+    document.body.classList.add('web');
+    $('startBtn').hidden = true; $('serverLink').hidden = true;
+    $('code').value = linkCode;
+    document.querySelector('.brand p').textContent = linkCode
+      ? `You're joining ${linkCode} as Luigi. Type your name and tap Join. Tip: Share › Add to Home Screen makes it full screen.`
+      : 'Type the 4-letter code from Mario’s phone and tap Join. Mario starts the game in the Mario & Luigi app.';
+  }
 
   let toastT = 0;
   function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2400); }
@@ -229,11 +241,11 @@
   $('close').onclick = () => $('sheet').classList.remove('open');
   $('sheet').addEventListener('click', (e) => { if (e.target === $('sheet')) $('sheet').classList.remove('open'); });
   async function shareCode() {
-    const text = `Play Super Mario Bros. with me as Luigi! Open the Mario & Luigi app and type the code ${room}`;
+    const text = `Play Super Mario Bros. with me as Luigi! Open this link in Safari (or any browser), turn your phone sideways and tap Join: ${server()}/play/${room}\n\nHave the Mario & Luigi app? Type the code ${room} instead.`;
     if (navigator.share) { try { await navigator.share({ title: 'Mario & Luigi', text }); return; } catch {} }
     try { await navigator.clipboard.writeText(room); toast('Code copied: ' + room); } catch { toast('The code is ' + room); }
   }
-  $('shareBtn').onclick = shareCode; $('sbtn').onclick = shareCode;
+  $('shareBtn').textContent = 'Invite Luigi (link or code)'; $('shareBtn').onclick = shareCode; $('sbtn').onclick = shareCode;
   // "Show on a big screen": a link that opens Mario's screen, with sound, in any browser (TV, laptop).
   const watchBtn = $('shareBtn').cloneNode(false);
   watchBtn.id = 'watchBtn'; watchBtn.textContent = 'Show on a big screen'; watchBtn.hidden = true;
