@@ -151,7 +151,32 @@
   function paint() {
     document.querySelectorAll('[data-b]').forEach((el) => el.classList.toggle('on', !!(mask & (1 << BIT[el.dataset.b]))));
   }
-  function recompute() { let m = stickMask; for (const v of btnTouches.values()) m |= v; if (m !== mask) { mask = m; paint(); sendInput(); } }
+  function recompute() {
+    let m = stickMask; for (const v of btnTouches.values()) m |= v;
+    if (shake === 1) m &= ~(1 << BIT.y); else if (shake === 2) m |= 1 << BIT.y;   // a shake taps Y (item) even while running
+    if (m !== mask) { mask = m; paint(); sendInput(); }
+  }
+
+  // ---- Shake the phone = item (fireball, throw a shell…): a quick tap of Y ----------------------
+  let shake = 0, shakeAt = 0, lastMag = 0;
+  function onShake() {
+    const now = performance.now();
+    if (!playing() || sheetOpen() || now - shakeAt < 350) return;
+    shakeAt = now;
+    shake = 1; recompute();                                   // let go of Y for a moment (if running) ...
+    setTimeout(() => { shake = 2; recompute(); }, 40);        // ... then press it ...
+    setTimeout(() => { shake = 0; recompute(); }, 160);       // ... and let go
+  }
+  addEventListener('devicemotion', (e) => {
+    const a = e.acceleration;
+    let mag;
+    if (a && a.x != null) mag = Math.hypot(a.x, a.y, a.z);
+    else { const g = e.accelerationIncludingGravity; if (!g || g.x == null) return; const m2 = Math.hypot(g.x, g.y, g.z); mag = Math.abs(m2 - lastMag) * 1.5; lastMag = m2; }
+    if (mag > 14) onShake();
+  });
+  function askMotion() {   // iPhone asks once; must be called from a tap
+    try { if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function') DeviceMotionEvent.requestPermission().catch(() => {}); } catch {}
+  }
   const sheetOpen = () => $('sheet').classList.contains('open');
   const playing = () => document.body.classList.contains('playing');
   const inside = (el, t) => { const r = el.getBoundingClientRect(); return t.clientX >= r.left && t.clientX <= r.right && t.clientY >= r.top && t.clientY <= r.bottom; };
@@ -315,6 +340,7 @@
     role = r; myName = n; room = code;
     document.body.classList.add('playing'); document.body.classList.toggle('luigi', role === 'luigi');
     startAudio();   // a tap is needed before a phone plays sound
+    askMotion();    // and before it shares the motion sensor (shake = item)
     $('codeTag').textContent = role === 'mario' ? 'CODE ' + room : '';
     lite = role === 'luigi' && store.get('lite') === 'on'; paintLite(); $('liteBtn').hidden = role !== 'luigi';
     $('shareBtn').hidden = role !== 'mario'; watchBtn.hidden = role !== 'mario';

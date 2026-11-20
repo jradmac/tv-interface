@@ -40,6 +40,7 @@ struct GameWebView: UIViewRepresentable {
         web.scrollView.contentInsetAdjustmentBehavior = .never
         web.allowsLinkPreview = false
         web.navigationDelegate = context.coordinator
+        web.uiDelegate = context.coordinator           // lets the game use the motion sensor (shake = item)
         #if DEBUG
         web.isInspectable = true                    // Safari > Develop on the Mac can look inside
         #endif
@@ -51,8 +52,14 @@ struct GameWebView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         // If the page ever crashes (memory), load it again instead of showing a blank screen.
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { webView.reload() }
+
+        // Shake the phone to use your item: the game page reads the motion sensor without asking each time.
+        func webView(_ webView: WKWebView, requestDeviceOrientationAndMotionPermissionFor origin: WKSecurityOrigin,
+                     initiatedByFrame frame: WKFrameInfo, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+            decisionHandler(.grant)
+        }
     }
 }
