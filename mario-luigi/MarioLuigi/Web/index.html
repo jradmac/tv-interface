@@ -97,7 +97,12 @@
   .okbtn.on{background:var(--jump-hi)}
   #turn{display:none;position:fixed;inset:0;background:var(--pad);z-index:9;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;padding:30px;color:var(--dim);font-size:16px}
   #turn svg{width:64px;height:64px;color:var(--keyink)}
-  @media (orientation:portrait){ #turn{display:flex} }
+  /* Sideways only while playing: the start/join screen works held upright too (links open in portrait). */
+  @media (orientation:portrait){
+    body.playing #turn{display:flex}
+    #home{flex-direction:column;justify-content:center;gap:22px;overflow-y:auto}
+    .brand{max-width:none;width:100%} .choices{width:100%}
+  }
 
   .sheet{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s;z-index:10}
   .sheet.open{opacity:1;pointer-events:auto}
