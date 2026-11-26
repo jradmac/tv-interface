@@ -1,0 +1,7 @@
+{
+  "name": "mario-luigi-relay-root",
+  "private": true,
+  "description": "Railway entry: runs the Mario & Luigi relay in mario-luigi/relay",
+  "scripts": { "start": "node mario-luigi/relay/relay.mjs" },
+  "engines": { "node": ">=18" }
+}

@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#141416">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Luigi">
+<title>Mario &amp; Luigi</title>
+<style>
+  :root{--pad:#141416;--key:#25252A;--key-hi:#34343B;--keyink:#E9E6DF;--dim:#8C8880;--mario:#E5483B;--luigi:#3FAE49;--acc:#E5483B;
+        --jump:#3B356A;--jump-hi:#4A4385;--run:#5A3550;--run-hi:#6E4262}
+  body.luigi{--acc:#3FAE49}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none;background:var(--pad);color:var(--keyink);
+            -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none;-webkit-tap-highlight-color:transparent}
+  body{font-family:-apple-system,system-ui,Inter,sans-serif}
+  button{font-family:inherit}
+
+  /* ---- Home ---- */
+  #home{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;gap:28px;
+        padding:max(16px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left))}
+  body.playing #home{display:none}
+  .brand{display:flex;flex-direction:column;gap:10px;max-width:300px}
+  .brand h1{font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1.05}
+  .brand h1 span:first-child{color:var(--mario)} .brand h1 span:last-child{color:var(--luigi)}
+  .brand p{color:var(--dim);font-size:14px;line-height:1.45}
+  .choices{display:flex;flex-direction:column;gap:12px;width:min(360px,52vw)}
+  .field{height:48px;border-radius:14px;border:0;background:var(--key);color:var(--keyink);font:600 18px -apple-system,system-ui;padding:0 14px;outline:none;width:100%;
+         user-select:text;-webkit-user-select:text;touch-action:manipulation}
+  .big{height:54px;border:0;border-radius:16px;font:700 17px -apple-system,system-ui;color:#fff;touch-action:manipulation;width:100%}
+  .big.mario{background:var(--mario)} .big.luigi{background:var(--luigi)}
+  .big:disabled{opacity:.5}
+  .joinrow{display:flex;gap:10px}
+  .joinrow .field{flex:0 0 120px;text-align:center;letter-spacing:.3em;text-transform:uppercase}
+  #hmsg{min-height:18px;font-size:13px;color:var(--dim);line-height:1.4}
+  .link{background:none;border:0;color:var(--dim);font-size:13px;text-decoration:underline;align-self:flex-start;touch-action:manipulation}
+  #serverRow{display:none;gap:8px}
+  #serverRow.open{display:flex}
+  #serverRow .field{font-size:14px;height:40px}
+  #serverRow button{border:0;border-radius:12px;background:var(--key-hi);color:var(--keyink);padding:0 14px;font-weight:600}
+
+  /* ---- Play ---- */
+  #play{position:fixed;inset:0;display:none;grid-template-columns:1fr auto 1fr;column-gap:12px;
+        padding:max(8px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+  body.playing #play{display:grid}
+  .side{display:flex;flex-direction:column;align-items:center;justify-content:space-between;min-width:0;padding:4px 0}
+  .mid{position:relative;display:flex;align-items:center;justify-content:center;min-height:0}
+  #screens{position:relative;height:100%;aspect-ratio:4/3;max-width:56vw}
+  #screens canvas{position:absolute;display:block;image-rendering:pixelated;background:#000;border-radius:10px;inset:0;width:100%;height:100%;
+                  box-shadow:0 0 0 1px rgba(255,255,255,.06),0 20px 50px rgba(0,0,0,.5)}
+  #smallslot{position:relative;width:min(140px,100%);aspect-ratio:4/3;flex:none}
+  #smallslot canvas{position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:pixelated;background:#000;border-radius:8px;box-shadow:0 0 0 2px rgba(255,255,255,.35),0 6px 18px rgba(0,0,0,.6)}
+  #smallslot .swapico{position:absolute;right:-6px;top:-6px;width:24px;height:24px;border-radius:12px;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  #smallslot .swapico svg{width:14px;height:14px}
+  #status{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:20px;
+          color:var(--keyink);font-size:16px;background:rgba(20,20,22,.9);border-radius:10px;z-index:3}
+  #status small{color:var(--dim);font-size:13px;max-width:320px;line-height:1.4}
+  #status .code{font-size:44px;font-weight:800;letter-spacing:.25em;color:var(--acc);margin-left:.25em}
+  #status button{margin-top:6px;height:40px;padding:0 18px;border:0;border-radius:12px;background:var(--key-hi);color:var(--keyink);font-weight:600}
+  #codeTag{position:absolute;left:8px;top:8px;z-index:2;background:rgba(0,0,0,.6);color:#fff;font-size:12px;font-weight:700;letter-spacing:.12em;padding:4px 9px;border-radius:999px;pointer-events:none}
+  #codeTag:empty{display:none}
+
+  .key{border:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:var(--key);color:var(--keyink);border-radius:999px;
+       box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 3px 10px rgba(0,0,0,.35);font-weight:700;transition:transform .06s,background .06s}
+  .key small{font-size:10px;letter-spacing:.14em;font-weight:600;opacity:.7}
+  .key.on{transform:scale(.93)}
+  .row{display:flex;gap:8px;align-items:center}
+  .tool{height:40px;padding:0 13px;gap:6px;flex-direction:row;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--dim)}
+  .tool svg{width:18px;height:18px}
+  .tool.live{background:var(--acc);color:#fff}
+  .sys{height:34px;padding:0 12px;font-size:10px;letter-spacing:.12em;color:var(--dim)}
+  .sys.on{background:var(--key-hi)}
+
+  /* Joystick: appears where the left thumb lands. Sideways moves (all the way = run), up jumps, down squats
+     (down in the air = ground pound). */
+  #stickzone{position:relative;flex:1;width:100%;min-height:0;margin:8px 0;touch-action:none}
+  #stickbase{position:absolute;left:50%;top:55%;width:min(150px,38vmin);height:min(150px,38vmin);margin:calc(min(150px,38vmin) / -2) 0 0 calc(min(150px,38vmin) / -2);
+             border-radius:50%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.16);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+             transition:opacity .2s;opacity:.75;pointer-events:none}
+  #stickbase.live{opacity:1;transition:none}
+  #stickbase::before,#stickbase::after{content:'';position:absolute;left:50%;width:0;height:0;border:6px solid transparent;margin-left:-6px;opacity:.45}
+  #stickbase::before{top:8px;border-bottom-color:#fff}
+  #stickbase::after{bottom:8px;border-top-color:#fff}
+  #knob{position:absolute;left:50%;top:50%;width:44%;height:44%;margin:-22% 0 0 -22%;border-radius:50%;background:rgba(255,255,255,.28);
+        box-shadow:0 4px 14px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.35)}
+  #stickbase.run #knob{background:color-mix(in srgb,var(--acc) 70%,transparent)}
+  .stickhint{position:absolute;left:0;right:0;bottom:0;text-align:center;font-size:10px;letter-spacing:.14em;font-weight:600;color:var(--dim);pointer-events:none;opacity:.8}
+
+  .actions{position:relative;width:100%;flex:1;min-height:0;--i:min(108px,28vmin);--o:min(66px,17vmin)}
+  .actions .key{position:absolute}
+  .itembtn{right:2px;bottom:8%;width:var(--i);height:var(--i);font-size:18px;background:var(--run)}
+  .itembtn.on{background:var(--run-hi)}
+  .okbtn{right:calc(var(--i) * .78);bottom:calc(8% + var(--i) * .82);width:var(--o);height:var(--o);font-size:15px;background:var(--jump)}
+  .okbtn.on{background:var(--jump-hi)}
+  #turn{display:none;position:fixed;inset:0;background:var(--pad);z-index:9;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;padding:30px;color:var(--dim);font-size:16px}
+  #turn svg{width:64px;height:64px;color:var(--keyink)}
+  /* Sideways only while playing: the start/join screen works held upright too (links open in portrait). */
+  @media (orientation:portrait){
+    body.playing #turn{display:flex}
+    #home{flex-direction:column;justify-content:center;gap:22px;overflow-y:auto}
+    .brand{max-width:none;width:100%} .choices{width:100%}
+  }
+
+  .sheet{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s;z-index:10}
+  .sheet.open{opacity:1;pointer-events:auto}
+  .card{width:min(560px,100%);background:#1D1D21;border-radius:22px 22px 0 0;padding:18px 18px max(18px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px}
+  .card h2{font-size:17px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+  .card h2 button{background:none;border:0;color:var(--dim);font:500 15px -apple-system,system-ui}
+  #who{font-size:14px;color:var(--dim);line-height:1.5}
+  .btn{height:46px;border:0;border-radius:14px;background:var(--key);color:var(--keyink);font:600 15px -apple-system,system-ui}
+  .toast{position:fixed;left:50%;top:max(14px,env(safe-area-inset-top));transform:translate(-50%,-10px);background:rgba(40,40,46,.95);color:#fff;z-index:11;
+         padding:10px 18px;border-radius:999px;font-size:14px;font-weight:500;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+
+  /* ---- Side panels: modern minimal finish (looks only; sizes the joystick math reads are unchanged) ---- */
+  body.playing{background:
+      radial-gradient(60vmax 60vmax at 0% 100%, color-mix(in srgb,var(--acc) 9%,transparent), transparent 60%),
+      radial-gradient(50vmax 50vmax at 100% 0%, rgba(255,255,255,.035), transparent 60%),
+      #0E0E10}
+  .side{padding:10px 6px;border-radius:28px;background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.012));
+        box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+  .key{background:rgba(255,255,255,.06);color:rgba(255,255,255,.88);font-weight:600;
+       box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);transition:transform .08s ease,background .08s ease,box-shadow .08s ease}
+  .key small{font-size:9px;letter-spacing:.08em;font-weight:500;opacity:.5;text-transform:lowercase}
+  .key.on{transform:scale(.94);background:rgba(255,255,255,.14)}
+  .sys{height:28px;padding:0 12px;font-size:9px;letter-spacing:.16em;font-weight:600;color:rgba(255,255,255,.45);background:transparent}
+  .sys.on{background:rgba(255,255,255,.1);color:#fff}
+  .tool{width:40px;height:40px;padding:0;justify-content:center;background:transparent;color:rgba(255,255,255,.5)}
+  .tool svg{width:16px;height:16px}
+
+  #stickbase{background:radial-gradient(circle,rgba(255,255,255,.05) 0 54%,rgba(255,255,255,.025) 55% 100%);
+             border:1px solid rgba(255,255,255,.12);opacity:.55;
+             box-shadow:0 0 0 6px rgba(255,255,255,.015)}
+  #stickbase.live{opacity:1;border-color:rgba(255,255,255,.2)}
+  #stickbase::before,#stickbase::after{border-width:4px;margin-left:-4px;opacity:.35}
+  #stickbase::before{top:10px} #stickbase::after{bottom:10px}
+  #knob{background:linear-gradient(180deg,rgba(255,255,255,.34),rgba(255,255,255,.18));
+        box-shadow:0 6px 18px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.25);
+        backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+  #stickbase.run #knob{background:var(--acc);box-shadow:0 0 0 6px color-mix(in srgb,var(--acc) 22%,transparent),0 6px 18px rgba(0,0,0,.45)}
+  .stickhint{font-size:9px;letter-spacing:.2em;font-weight:500;color:rgba(255,255,255,.3)}
+
+  .itembtn{background:color-mix(in srgb,var(--acc) 16%,rgba(255,255,255,.03));color:#fff;font-size:15px;letter-spacing:.14em;
+           box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--acc) 70%,transparent),0 10px 30px rgba(0,0,0,.35)}
+  .itembtn.on{background:var(--acc);box-shadow:inset 0 0 0 1.5px var(--acc),0 0 0 8px color-mix(in srgb,var(--acc) 18%,transparent)}
+  .okbtn{background:rgba(255,255,255,.05);font-size:13px;letter-spacing:.14em;color:rgba(255,255,255,.8)}
+  .okbtn.on{background:rgba(255,255,255,.9);color:#111}
+  .okbtn small{text-transform:none}
+  #smallslot canvas{border-radius:10px;box-shadow:0 0 0 1px rgba(255,255,255,.14),0 10px 24px rgba(0,0,0,.55)}
+  #smallslot .swapico{width:22px;height:22px;right:-5px;top:-5px;box-shadow:0 0 0 3px #141416}
+  #screens canvas{border-radius:12px;box-shadow:0 0 0 1px rgba(255,255,255,.07),0 24px 60px rgba(0,0,0,.6)}
+
+  /* ---- Layout: each side keeps a fixed width so the joystick, OK and ITEM always fit beside the screen;
+     the game screen takes whatever is left, staying 4:3. ---- */
+  #play{--sw:clamp(148px,18.5vw,200px);grid-template-columns:var(--sw) minmax(0,1fr) var(--sw);column-gap:10px}
+  .mid{container-type:size;min-width:0;height:100%}
+  #screens{width:min(100cqw,100cqh * 4 / 3);height:auto;max-width:none;aspect-ratio:4/3}
+  #stickbase{width:min(132px,34vmin,calc(var(--sw) - 16px));height:min(132px,34vmin,calc(var(--sw) - 16px));
+             margin:calc(min(132px,34vmin,calc(var(--sw) - 16px)) / -2) 0 0 calc(min(132px,34vmin,calc(var(--sw) - 16px)) / -2)}
+  .actions{--i:min(94px,25vmin);--o:min(58px,15vmin)}
+  .itembtn{right:6px}
+  .okbtn{right:calc(6px + var(--i) * .74)}
+  #smallslot{width:min(128px,100% - 8px)}
+  #status{gap:6px;padding:14px}
+  #status .code{font-size:clamp(28px,9cqh,44px)}
+</style>
+</head>
+<body>
+<div id="home">
+  <div class="brand">
+    <h1><span>Mario</span> &amp; <span>Luigi</span></h1>
+    <p>Super Mario Bros. together, each on your own phone. Mario starts a game and gets a 4-letter code. Luigi types the code to join, from anywhere.</p>
+  </div>
+  <div class="choices">
+    <input id="name" class="field" maxlength="10" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Your name">
+    <button class="big mario" id="startBtn">Start a game as Mario</button>
+    <div class="joinrow">
+      <input id="code" class="field" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE">
+      <button class="big luigi" id="joinBtn">Join as Luigi</button>
+    </div>
+    <div id="hmsg"></div>
+    <button class="link" id="serverLink">Server</button>
+    <div id="serverRow"><input id="server" class="field" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…"><button id="serverSave">Save</button></div>
+  </div>
+</div>
+
+<div id="play">
+  <div class="side left">
+    <div class="row"><div class="key sys" data-b="start">START</div><div class="key sys" data-b="select">SELECT</div></div>
+    <div id="stickzone"><div id="stickbase"><div id="knob"></div></div><div class="stickhint">MOVE · UP JUMPS</div></div>
+    <div class="row">
+      <button class="key tool" id="menuBtn" aria-label="Menu"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg></button>
+    </div>
+  </div>
+  <div class="mid">
+    <div id="screens">
+      <canvas id="top" width="256" height="192"></canvas>
+      <div id="codeTag"></div>
+      <div id="status"><span id="stext">Starting…</span><small id="ssub"></small><span class="code" id="scode"></span><button id="sbtn" hidden>Share the code</button></div>
+    </div>
+  </div>
+  <div class="side right">
+    <div id="smallslot"><canvas id="bot" width="256" height="192"></canvas><span class="swapico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13M3 13l4 4 4-4M17 20V7M13 11l4-4 4 4"/></svg></span></div>
+    <div class="actions">
+      <div class="key okbtn" data-b="a">OK<small>A</small></div>
+      <div class="key itembtn" data-b="b">JUMP<small>shake = item</small></div>
+    </div>
+  </div>
+</div>
+
+<div id="turn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M20 8a8 8 0 0 1 0 8M17.5 10.5l2.5-2.5 2 2.5"/></svg>Turn your phone sideways to play</div>
+
+<div class="sheet" id="sheet">
+  <div class="card">
+    <h2><span id="sheetTitle">Mario &amp; Luigi</span><button id="close">Back</button></h2>
+    <div id="who"></div>
+    <button class="btn" id="shareBtn">Share the code</button>
+    <button class="btn" id="liteBtn" hidden>Data saver: off</button>
+    <button class="btn" id="leave">Leave the game</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="game.js"></script>
+</body>
+</html>
