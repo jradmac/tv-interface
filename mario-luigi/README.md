@@ -17,3 +17,7 @@ link stays fast), and Luigi's phone gets its own screen streamed through a small
 ## App on the iPhones
 Open `MarioLuigi.xcodeproj` in Xcode, pick your iPhone at the top, press ▶ Run. Do the same for the
 second phone (any iPhone you plug into this Mac). Turn the phone sideways.
+
+## Kart Party (Mario Kart DS, up to 4 players)
+The same server also runs Kart Party rooms; the app is in `mario-kart/` (see its README). Friends join with
+`https://<server>/kart/ABCD` in any browser.

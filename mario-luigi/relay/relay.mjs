@@ -7,6 +7,12 @@
 //   GET /w/ABCD?k=KEY                         the watch page: Mario's screen and sound on any big screen
 //   WS /ws?role=watch&room=ABCD&k=KEY         a watch page (Mario's phone sets KEY with &wk= when it makes the room)
 //   Binary kinds 9 (Mario's screen JPEG) and 10 (Mario's sound: u32 rate, then 16-bit stereo) go from Mario to watch pages.
+// Kart Party (Mario Kart DS, up to 4 players) shares this server, in rooms of its own:
+//   WS /ws?game=kart&role=host&room=ABCD&name=&id=    the host's phone (runs every racer's DS)
+//   WS /ws?game=kart&role=guest&room=ABCD&name=&id=   a friend (seat 1-3, kept if they reconnect)
+//   GET /kart/ABCD                                    the browser join page (page and script only, never the game file)
+//   Binary byte 1 is the seat: a friend's buttons arrive at the host stamped with their seat, and the
+//   host's pictures/sound for seat N go only to that friend.
 // Also answers under /ml/ (when a proxy keeps that prefix).
 import http from 'node:http';
 import crypto from 'node:crypto';
@@ -17,7 +23,8 @@ const WATCH_PAGE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'watc
 // The browser Luigi page (/play/ABCD): the app's own page and script. Luigi's side never runs the game,
 // so only these two files are served (never the game file).
 const APP_WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'MarioLuigi', 'Web');
-const PLAY_FILES = { 'index.html': 'text/html; charset=utf-8', 'game.js': 'text/javascript; charset=utf-8' };
+const PLAY_FILES = { 'index.html': 'text/html; charset=utf-8', 'game.js': 'text/javascript; charset=utf-8', 'kart.js': 'text/javascript; charset=utf-8' };
+const KART_WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'mario-kart', 'MarioKart', 'Web');
 
 const PORT = Number(process.env.PORT || 8096), HOST = process.env.HOST || '0.0.0.0';
 const MAX_ROOMS = 50, MAX_MSG = 1 << 20, ROOM_IDLE = 6 * 3600e3, GRACE = 20000;
@@ -141,6 +148,72 @@ function onSocket(s, role, code, name, id, wk) {
   if (role === 'host') tellWatchers(r);
 }
 
+// ---- Kart Party rooms: one host, up to 3 friends ----------------------------------------------
+// code -> { host: {sock,name,id}|null, seats: [null, p1, p2, p3], at, gone: {} }
+const karts = new Map();
+function kartInfo(r, you) {
+  return { t: 'room', you, host: r.host ? { name: r.host.name, away: !r.host.sock } : null,
+    players: r.seats.map((p, seat) => p && { seat, name: p.name, away: !p.sock }).filter(Boolean) };
+}
+function kartTell(r) {
+  r.host && r.host.sock && r.host.sock.send(kartInfo(r, 0));
+  r.seats.forEach((p, seat) => p && p.sock && p.sock.send(kartInfo(r, seat)));
+}
+function kartSweep() { const now = Date.now(); for (const [c, r] of karts) if ((!r.host && !r.seats.some(Boolean)) || now - r.at > ROOM_IDLE) { r.host && r.host.sock && r.host.sock.close(1000); r.seats.forEach((p) => p && p.sock && p.sock.close(1000)); karts.delete(c); } }
+setInterval(kartSweep, 60e3).unref();
+function onKart(s, role, code, name, id) {
+  let r = karts.get(code), seat = 0;
+  if (role === 'host') {
+    if (!r) { if (karts.size >= MAX_ROOMS) kartSweep(); if (karts.size >= MAX_ROOMS) { s.send({ t: 'error', msg: 'The server is busy. Try again in a minute.' }); return s.close(1000); } r = { host: null, seats: [null, null, null, null], at: Date.now(), gone: {} }; karts.set(code, r); }
+    else if (r.host && r.host.id !== id) { s.send({ t: 'error', msg: 'That race code is taken. Start a new race.' }); return s.close(1000); }
+  } else {
+    if (!r || !r.host) { s.send({ t: 'error', msg: 'No race with that code. Check the letters with the host.' }); return s.close(1000); }
+    seat = r.seats.findIndex((p, i) => i > 0 && p && p.id === id);
+    if (seat < 1) seat = r.seats.findIndex((p, i) => i > 0 && !p);
+    if (seat < 1) { s.send({ t: 'error', msg: 'The race is full: 4 players are already in.' }); return s.close(1000); }
+  }
+  const slot = role === 'host' ? 'host' : seat;
+  const get = () => (role === 'host' ? r.host : r.seats[seat]);
+  const prev = get();
+  const me = prev && prev.id === id ? prev : { id, name };
+  clearTimeout(r.gone[slot]);
+  if (me.sock && me.sock !== s) { const old = me.sock; old.onclose = () => {}; old.close(4000); }
+  me.sock = s; me.name = name; r.at = Date.now();
+  if (role === 'host') r.host = me; else r.seats[seat] = me;
+  log('kart join', code, role, seat, name);
+  s.onmessage = (txt) => {
+    let m; try { m = JSON.parse(txt); } catch { return; }
+    if (m.t === 'ping') return s.send({ t: 'pong', at: m.at });
+    if (m.t === 'leave') { s.onclose = () => {}; drop(); return s.close(1000); }
+    if (role === 'host') {   // to one friend ({to: seat}) or to all of them
+      const out = JSON.stringify(m);
+      r.seats.forEach((p, i) => { if (p && p.sock && (m.to == null || m.to === i)) p.sock.send(out); });
+    } else if (r.host && r.host.sock) { m.seat = seat; r.host.sock.send(m); }
+  };
+  s.onbinary = (buf) => {
+    r.at = Date.now();
+    if (buf.length < 2) return;
+    if (role === 'host') {
+      const p = r.seats[buf[1]]; if (!p || !p.sock || buf[1] === 0) return;
+      // A slow connection: skip pictures it can't take yet (kind 5), so it never falls behind.
+      if (buf[0] === 5 && p.sock.backlog > 200e3) return;
+      if (p.sock.backlog > 600e3) return;
+      p.sock.sendBinary(buf);
+    } else if (r.host && r.host.sock && buf[0] === 3) { buf[1] = seat; r.host.sock.sendBinary(buf); }
+  };
+  function drop() {
+    if (get() !== me) return;
+    log('kart leave', code, role, seat, name);
+    if (role === 'host') {
+      r.host = null;
+      r.seats.forEach((p) => { if (p && p.sock) { p.sock.send({ t: 'ended' }); p.sock.close(1000); } });
+      karts.delete(code);
+    } else { r.seats[seat] = null; kartTell(r); }
+  }
+  s.onclose = () => { if (me.sock !== s) return; me.sock = null; r.gone[slot] = setTimeout(drop, GRACE); kartTell(r); };
+  kartTell(r);
+}
+
 function accept(req, socket) {
   const key = req.headers['sec-websocket-key'];
   if (!key) { socket.destroy(); return false; }
@@ -158,6 +231,10 @@ const server = http.createServer((req, res) => {
   if (play) {
     return fs.readFile(path.join(APP_WEB, play), (e, d) => { if (e) { res.writeHead(500); return res.end('Page missing'); } res.writeHead(200, { 'content-type': PLAY_FILES[play], 'cache-control': 'no-cache' }); res.end(d); });
   }
+  const kart = p.match(/^\/kart(?:\/([A-Za-z]{4}))?\/?$/) ? 'index.html' : (p.match(/^\/kart(?:\/[A-Za-z]{4})?\/kart\.js$/) || p === '/kart.js' ? 'kart.js' : null);
+  if (kart) {
+    return fs.readFile(path.join(KART_WEB, kart), (e, d) => { if (e) { res.writeHead(500); return res.end('Page missing'); } res.writeHead(200, { 'content-type': PLAY_FILES[kart], 'cache-control': 'no-cache' }); res.end(d); });
+  }
   if (p === '/health') { res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' }); return res.end('ok'); }
   res.writeHead(404, { 'content-type': 'text/plain' }); res.end('Not found');
 });
@@ -168,7 +245,8 @@ server.on('upgrade', (req, socket) => {
   if (!['host', 'guest', 'watch'].includes(role) || code.length !== 4) return socket.destroy();
   if (!accept(req, socket)) return;
   const key = (v) => String(v || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 32);
+  if (q.get('game') === 'kart') { if (role === 'watch') return socket.destroy(); return onKart(new Sock(socket), role, code, clean(q.get('name'), 10) || (role === 'host' ? 'Host' : 'Racer'), clean(q.get('id'), 40) || crypto.randomUUID()); }
   if (role === 'watch') return onWatch(new Sock(socket), code, key(q.get('k')));
   onSocket(new Sock(socket), role, code, clean(q.get('name'), 10) || (role === 'host' ? 'Mario' : 'Luigi'), clean(q.get('id'), 40) || crypto.randomUUID(), key(q.get('wk')));
 });
-server.listen(PORT, HOST, () => log(`Mario & Luigi relay on http://${HOST}:${PORT}`));
+server.listen(PORT, HOST, () => log(`Mario & Luigi + Kart Party relay on http://${HOST}:${PORT}`));
